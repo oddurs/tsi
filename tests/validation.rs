@@ -9,8 +9,10 @@
 //! - Encyclopedia Astronautica
 
 use approx::assert_relative_eq;
+use tsi::engine::EngineDatabase;
+use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
 use tsi::physics::{burn_time, delta_v, twr, G0};
-use tsi::units::{Force, Isp, Mass};
+use tsi::units::{Force, Isp, Mass, Ratio, Velocity};
 
 /// Saturn V first stage (S-IC) - 5x F-1 engines
 ///
@@ -271,4 +273,184 @@ fn optimal_staging_equal_dv_theory() {
     assert_relative_eq!(dv_per_stage, 3000.0, epsilon = 0.1);
     assert!(required_ratio > 1.0);
     assert!(required_ratio < 5.0); // Reasonable for 3000 m/s per stage
+}
+
+// ============================================================================
+// Optimizer validation tests
+// ============================================================================
+
+/// Optimizer produces equal delta-v per stage (optimal staging theory)
+///
+/// For identical engines and structural ratios, the optimal solution
+/// splits delta-v equally between stages.
+#[test]
+fn optimizer_equal_dv_split() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+
+    let problem = Problem::new(
+        Mass::kg(5_000.0),
+        Velocity::mps(9_000.0),
+        vec![raptor.clone()],
+        Constraints::default(),
+    )
+    .with_stage_count(2);
+
+    let optimizer = AnalyticalOptimizer;
+    let solution = optimizer.optimize(&problem).unwrap();
+    let rocket = &solution.rocket;
+
+    let stage1_dv = rocket.stage_delta_v(0).as_mps();
+    let stage2_dv = rocket.stage_delta_v(1).as_mps();
+
+    // Stages should have approximately equal delta-v
+    let ratio = stage1_dv / stage2_dv;
+    assert!(
+        ratio > 0.95 && ratio < 1.05,
+        "Stage delta-v not equal: S1={:.0}, S2={:.0}",
+        stage1_dv,
+        stage2_dv
+    );
+}
+
+/// Optimizer meets target delta-v with margin
+#[test]
+fn optimizer_meets_target_with_margin() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+
+    let target = 9_400.0;
+    let problem = Problem::new(
+        Mass::kg(5_000.0),
+        Velocity::mps(target),
+        vec![raptor.clone()],
+        Constraints::default(),
+    )
+    .with_stage_count(2);
+
+    let optimizer = AnalyticalOptimizer;
+    let solution = optimizer.optimize(&problem).unwrap();
+
+    let achieved = solution.rocket.total_delta_v().as_mps();
+    let margin = achieved - target;
+
+    // Should exceed target (2% margin built in)
+    assert!(
+        achieved >= target,
+        "Optimizer failed to meet target: {:.0} < {:.0}",
+        achieved,
+        target
+    );
+    // Margin should be reasonable (1-5%)
+    let margin_percent = margin / target * 100.0;
+    assert!(
+        margin_percent >= 1.0 && margin_percent <= 5.0,
+        "Margin outside expected range: {:.1}%",
+        margin_percent
+    );
+}
+
+/// Optimizer respects TWR constraints
+#[test]
+fn optimizer_respects_twr_constraints() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+
+    let min_twr = 1.3;
+    let constraints = Constraints::new(
+        Ratio::new(min_twr),
+        Ratio::new(0.7),
+        2,
+        Ratio::new(0.08),
+    );
+
+    let problem = Problem::new(
+        Mass::kg(10_000.0),
+        Velocity::mps(9_400.0),
+        vec![raptor.clone()],
+        constraints,
+    )
+    .with_stage_count(2);
+
+    let optimizer = AnalyticalOptimizer;
+    let solution = optimizer.optimize(&problem).unwrap();
+
+    // First stage TWR must meet minimum
+    let stage1_twr = solution.rocket.stage_twr(0).as_f64();
+    assert!(
+        stage1_twr >= min_twr,
+        "Stage 1 TWR below minimum: {:.2} < {:.2}",
+        stage1_twr,
+        min_twr
+    );
+}
+
+/// Optimizer produces reasonable payload fraction
+///
+/// For LEO missions, payload fraction is typically 2-4% for
+/// expendable rockets with good engines.
+#[test]
+fn optimizer_reasonable_payload_fraction() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+
+    let payload = 5_000.0;
+    let problem = Problem::new(
+        Mass::kg(payload),
+        Velocity::mps(9_400.0), // LEO delta-v
+        vec![raptor.clone()],
+        Constraints::default(),
+    )
+    .with_stage_count(2);
+
+    let optimizer = AnalyticalOptimizer;
+    let solution = optimizer.optimize(&problem).unwrap();
+
+    let pf = solution.rocket.payload_fraction().as_f64() * 100.0;
+
+    // Payload fraction should be in realistic range for LEO
+    assert!(
+        pf >= 1.5 && pf <= 5.0,
+        "Payload fraction unrealistic: {:.2}%",
+        pf
+    );
+}
+
+/// Different engines produce different optimal configurations
+#[test]
+fn optimizer_engine_comparison() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+    let merlin = db.get("merlin-1d").unwrap();
+
+    let problem_raptor = Problem::new(
+        Mass::kg(5_000.0),
+        Velocity::mps(9_000.0),
+        vec![raptor.clone()],
+        Constraints::default(),
+    )
+    .with_stage_count(2);
+
+    let problem_merlin = Problem::new(
+        Mass::kg(5_000.0),
+        Velocity::mps(9_000.0),
+        vec![merlin.clone()],
+        Constraints::default(),
+    )
+    .with_stage_count(2);
+
+    let optimizer = AnalyticalOptimizer;
+    let raptor_solution = optimizer.optimize(&problem_raptor).unwrap();
+    let merlin_solution = optimizer.optimize(&problem_merlin).unwrap();
+
+    // Raptor has higher Isp (350s vs 311s), so should have better payload fraction
+    let raptor_pf = raptor_solution.rocket.payload_fraction().as_f64();
+    let merlin_pf = merlin_solution.rocket.payload_fraction().as_f64();
+
+    assert!(
+        raptor_pf > merlin_pf,
+        "Higher Isp engine should have better payload fraction: Raptor={:.3}, Merlin={:.3}",
+        raptor_pf,
+        merlin_pf
+    );
 }

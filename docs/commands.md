@@ -142,6 +142,121 @@ tsi engines --propellant kerosene --verbose
 
 ---
 
+## tsi optimize
+
+Optimize a two-stage rocket configuration to meet a delta-v target.
+
+### Usage
+
+```bash
+tsi optimize [OPTIONS] --payload <KG> --target-dv <M/S> --engine <NAME>
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--payload <KG>` | Payload mass in kg (required) |
+| `--target-dv <M/S>` | Target delta-v in m/s (required) |
+| `--engine <NAME>` | Engine name from database (required) |
+| `--min-twr <RATIO>` | Minimum first stage TWR [default: 1.2] |
+| `--min-upper-twr <RATIO>` | Minimum upper stage TWR [default: 0.5] |
+| `--max-stages <N>` | Maximum number of stages [default: 2] |
+| `--structural-ratio <R>` | Structural mass / propellant mass [default: 0.08] |
+| `--sea-level` | Use sea-level thrust/ISP for first stage TWR display |
+| `--gravity <BODY>` | Surface gravity for TWR display: earth, mars, moon [default: earth] |
+| `-o, --output <FORMAT>` | Output format: pretty, json [default: pretty] |
+
+### Algorithm
+
+The optimizer uses an analytical solution based on optimal staging theory:
+
+1. **Equal delta-v split** - For identical engines, optimal staging splits delta-v equally between stages
+2. **Iterative engine count** - Determines minimum engines per stage to meet TWR constraints
+3. **2% margin** - Adds 2% to target delta-v for robustness
+
+### Examples
+
+```bash
+# Basic two-stage rocket to LEO (9,400 m/s)
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
+
+# Higher payload with custom TWR constraint
+tsi optimize --payload 10000 --target-dv 9400 --engine raptor-2 --min-twr 1.3
+
+# Using Merlin-1D for Falcon 9-style vehicle
+tsi optimize --payload 10000 --target-dv 8000 --engine merlin-1d
+
+# Sea-level TWR for first stage (important for Earth launch)
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --sea-level
+
+# Show TWR adjusted for Mars gravity
+tsi optimize --payload 5000 --target-dv 5700 --engine raptor-2 --gravity mars
+
+# JSON output for scripting
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
+```
+
+### Output Fields
+
+**Pretty output includes:**
+- Target and achieved delta-v
+- Total rocket mass
+- Stage-by-stage breakdown with:
+  - Engine name and count
+  - Propellant mass and type
+  - Dry mass
+  - Stage delta-v
+  - Burn time
+  - TWR at ignition
+- Payload fraction
+- Delta-v margin (m/s and %)
+
+**JSON output includes:**
+- `target_delta_v_mps` - Target delta-v
+- `total_mass_kg` - Total rocket mass
+- `total_delta_v_mps` - Achieved delta-v
+- `payload_fraction` - Payload / total mass
+- `margin_mps` - Delta-v margin
+- `stages[]` - Array of stage details
+
+### Example Output
+
+```
+═══════════════════════════════════════════════════════════════
+  tsi — Staging Optimization Complete
+═══════════════════════════════════════════════════════════════
+
+  Target Δv:  9,400 m/s    Payload:  5,000 kg
+  Solution:   2-stage    Total mass:  205,430 kg
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  STAGE 2 (upper)                                            │
+  │  Engine:     Raptor-2 (×1)                                  │
+  │  Propellant: 26,534 kg (LOX/CH4)                            │
+  │  Dry mass:   3,723 kg                                       │
+  │  Δv:         4,794 m/s                                      │
+  │  Burn time:  37.2s                                          │
+  │  TWR:        7.09                                           │
+  └─────────────────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────┐
+  │  STAGE 1 (booster)                                          │
+  │  Engine:     Raptor-2 (×2)                                  │
+  │  Propellant: 154,605 kg (LOX/CH4)                           │
+  │  Dry mass:   15,568 kg                                      │
+  │  Δv:         4,794 m/s                                      │
+  │  Burn time:  1m 48s                                         │
+  │  TWR:        2.43                                           │
+  └─────────────────────────────────────────────────────────────┘
+
+  Payload fraction:  2.43%
+  Delta-v margin:    +188 m/s (2.0%)
+
+═══════════════════════════════════════════════════════════════
+```
+
+---
+
 ## Error Handling
 
 ### Unknown Engine
