@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::engine::EngineDatabase;
 use crate::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+use crate::output::terminal;
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
@@ -386,92 +387,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
-    let rocket = &solution.rocket;
-    let stages = rocket.stages();
-
-    println!();
-    println!("═══════════════════════════════════════════════════════════════");
-    println!("  tsi — Staging Optimization Complete");
-    println!("═══════════════════════════════════════════════════════════════");
-    println!();
-    println!(
-        "  Target Δv:  {} m/s    Payload:  {} kg",
-        format_thousands_f64(args.target_dv),
-        format_thousands_f64(args.payload)
-    );
-    println!(
-        "  Solution:   {}-stage{}     Total mass:  {} kg",
-        rocket.stage_count(),
-        if rocket.stage_count() == 1 { " " } else { "" },
-        format_thousands_f64(rocket.total_mass().as_kg())
-    );
-    println!();
-
-    // Print stages from top to bottom (reverse order)
-    for (i, stage) in stages.iter().enumerate().rev() {
-        let stage_num = i + 1;
-        let stage_name = if i == 0 { "booster" } else { "upper" };
-        let stage_dv = rocket.stage_delta_v(i);
-        let stage_twr = rocket.stage_twr(i);
-
-        println!("  ┌─────────────────────────────────────────────────────────────┐");
-        println!(
-            "  │  STAGE {} ({}){}│",
-            stage_num,
-            stage_name,
-            " ".repeat(47 - stage_name.len())
-        );
-        println!(
-            "  │  Engine:     {} (×{}){}│",
-            stage.engine().name,
-            stage.engine_count(),
-            " ".repeat(44 - stage.engine().name.len() - format!("{}", stage.engine_count()).len())
-        );
-        println!(
-            "  │  Propellant: {} kg ({}){}│",
-            format_thousands_f64(stage.propellant_mass().as_kg()),
-            stage.engine().propellant.name(),
-            " ".repeat(
-                35 - format_thousands_f64(stage.propellant_mass().as_kg()).len()
-                    - stage.engine().propellant.name().len()
-            )
-        );
-        println!(
-            "  │  Dry mass:   {} kg{}│",
-            format_thousands_f64(stage.dry_mass().as_kg()),
-            " ".repeat(47 - format_thousands_f64(stage.dry_mass().as_kg()).len())
-        );
-        println!(
-            "  │  Δv:         {} m/s{}│",
-            format_thousands_f64(stage_dv.as_mps()),
-            " ".repeat(47 - format_thousands_f64(stage_dv.as_mps()).len())
-        );
-        println!(
-            "  │  Burn time:  {}{}│",
-            stage.burn_time(),
-            " ".repeat(51 - format!("{}", stage.burn_time()).len())
-        );
-        println!(
-            "  │  TWR:        {:.2}{}│",
-            stage_twr.as_f64(),
-            " ".repeat(55 - format!("{:.2}", stage_twr.as_f64()).len())
-        );
-        println!("  └─────────────────────────────────────────────────────────────┘");
-    }
-
-    println!();
-    println!(
-        "  Payload fraction:  {:.2}%",
-        solution.payload_fraction_percent()
-    );
-    println!(
-        "  Delta-v margin:    +{} m/s ({:.1}%)",
-        format_thousands_f64(solution.margin.as_mps()),
-        solution.margin_percent(Velocity::mps(args.target_dv))
-    );
-    println!();
-    println!("═══════════════════════════════════════════════════════════════");
-    println!();
+    terminal::print_solution(args.target_dv, args.payload, solution);
 }
 
 fn print_solution_json(
