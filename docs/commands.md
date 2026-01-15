@@ -160,9 +160,11 @@ tsi optimize [OPTIONS] --payload <KG> --target-dv <M/S> --engine <NAME>
 | `--target-dv <M/S>` | Target delta-v in m/s (required) |
 | `--engine <NAME>` | Engine name from database (required) |
 | `--min-twr <RATIO>` | Minimum first stage TWR [default: 1.2] |
-| `--min-upper-twr <RATIO>` | Minimum upper stage TWR [default: 0.7] |
+| `--min-upper-twr <RATIO>` | Minimum upper stage TWR [default: 0.5] |
 | `--max-stages <N>` | Maximum number of stages [default: 2] |
 | `--structural-ratio <R>` | Structural mass / propellant mass [default: 0.08] |
+| `--sea-level` | Use sea-level thrust/ISP for first stage TWR display |
+| `--gravity <BODY>` | Surface gravity for TWR display: earth, mars, moon [default: earth] |
 | `-o, --output <FORMAT>` | Output format: pretty, json [default: pretty] |
 
 ### Algorithm
@@ -184,6 +186,12 @@ tsi optimize --payload 10000 --target-dv 9400 --engine raptor-2 --min-twr 1.3
 
 # Using Merlin-1D for Falcon 9-style vehicle
 tsi optimize --payload 10000 --target-dv 8000 --engine merlin-1d
+
+# Sea-level TWR for first stage (important for Earth launch)
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --sea-level
+
+# Show TWR adjusted for Mars gravity
+tsi optimize --payload 5000 --target-dv 5700 --engine raptor-2 --gravity mars
 
 # JSON output for scripting
 tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
