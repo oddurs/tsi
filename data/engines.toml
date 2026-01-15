@@ -1,0 +1,101 @@
+# tsi Engine Database
+# All values in SI units: thrust in N, Isp in s, mass in kg
+
+[[engine]]
+name = "Merlin-1D"
+thrust_sl = 845000
+thrust_vac = 914000
+isp_sl = 282
+isp_vac = 311
+dry_mass = 470
+propellant = "LoxRp1"
+
+[[engine]]
+name = "Merlin-Vacuum"
+thrust_sl = 0
+thrust_vac = 981000
+isp_sl = 0
+isp_vac = 348
+dry_mass = 470
+propellant = "LoxRp1"
+
+[[engine]]
+name = "Raptor-2"
+thrust_sl = 2256000
+thrust_vac = 2450000
+isp_sl = 327
+isp_vac = 350
+dry_mass = 1600
+propellant = "LoxCh4"
+
+[[engine]]
+name = "Raptor-Vacuum"
+thrust_sl = 0
+thrust_vac = 2550000
+isp_sl = 0
+isp_vac = 380
+dry_mass = 1600
+propellant = "LoxCh4"
+
+[[engine]]
+name = "RS-25"
+thrust_sl = 1859000
+thrust_vac = 2279000
+isp_sl = 366
+isp_vac = 452
+dry_mass = 3527
+propellant = "LoxLh2"
+
+[[engine]]
+name = "RL-10C"
+thrust_sl = 0
+thrust_vac = 106000
+isp_sl = 0
+isp_vac = 453
+dry_mass = 190
+propellant = "LoxLh2"
+
+[[engine]]
+name = "F-1"
+thrust_sl = 6770000
+thrust_vac = 7770000
+isp_sl = 263
+isp_vac = 304
+dry_mass = 8400
+propellant = "LoxRp1"
+
+[[engine]]
+name = "J-2"
+thrust_sl = 0
+thrust_vac = 1033000
+isp_sl = 0
+isp_vac = 421
+dry_mass = 1788
+propellant = "LoxLh2"
+
+[[engine]]
+name = "RD-180"
+thrust_sl = 3830000
+thrust_vac = 4152000
+isp_sl = 311
+isp_vac = 338
+dry_mass = 5480
+propellant = "LoxRp1"
+
+[[engine]]
+name = "BE-4"
+thrust_sl = 2400000
+thrust_vac = 2600000
+isp_sl = 310
+isp_vac = 340
+dry_mass = 2000
+propellant = "LoxCh4"
+
+[[engine]]
+name = "Rutherford"
+thrust_sl = 24000
+thrust_vac = 26000
+isp_sl = 303
+isp_vac = 343
+dry_mass = 35
+propellant = "LoxRp1"
