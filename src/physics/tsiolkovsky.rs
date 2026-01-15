@@ -1,18 +1,133 @@
+//! Tsiolkovsky rocket equation implementation.
+//!
+//! The Tsiolkovsky rocket equation, derived by Konstantin Tsiolkovsky in 1903,
+//! is the fundamental equation of astronautics. It describes the relationship
+//! between a rocket's change in velocity (delta-v) and the mass of propellant
+//! consumed.
+//!
+//! # The Equation
+//!
+//! ```text
+//! Δv = Isp × g₀ × ln(m₀/m₁)
+//! ```
+//!
+//! Where:
+//! - **Δv** (delta-v): Change in velocity the rocket can achieve (m/s)
+//! - **Isp**: Specific impulse - a measure of engine efficiency (seconds)
+//! - **g₀**: Standard gravity constant (9.80665 m/s²)
+//! - **m₀**: Initial "wet" mass (propellant + structure + payload)
+//! - **m₁**: Final "dry" mass (structure + payload, propellant exhausted)
+//! - **m₀/m₁**: Mass ratio - always ≥ 1
+//!
+//! # Physical Intuition
+//!
+//! The equation comes from conservation of momentum. As a rocket expels mass
+//! (exhaust gases) in one direction, it accelerates in the opposite direction.
+//! The logarithm appears because as the rocket gets lighter, each kilogram of
+//! propellant produces more acceleration - but with diminishing returns.
+//!
+//! # Practical Implications
+//!
+//! - **Mass ratio is exponential**: To double delta-v, you need to square the
+//!   mass ratio (e.g., from 3:1 to 9:1), which is why rockets are mostly fuel.
+//! - **Isp is linear**: Doubling Isp doubles delta-v, making efficient engines
+//!   extremely valuable.
+//! - **Staging helps**: By discarding empty tanks, each stage starts with a
+//!   better mass ratio than a single-stage vehicle could achieve.
+
 use crate::units::{Isp, Ratio, Velocity};
 
 use super::G0;
 
 /// Calculate delta-v using the Tsiolkovsky rocket equation.
 ///
+/// This is the primary equation of astronautics, relating a rocket's
+/// performance to its mass ratio and engine efficiency.
+///
+/// # Formula
+///
+/// ```text
 /// Δv = Isp × g₀ × ln(mass_ratio)
+/// ```
+///
+/// # Arguments
+///
+/// * `isp` - Specific impulse of the engine in seconds. Higher is better.
+///   Typical values: 300-350s (kerosene), 380-450s (hydrogen).
+/// * `mass_ratio` - Ratio of wet mass to dry mass (m₀/m₁). Must be ≥ 1.
+///   A mass ratio of 10 means the rocket is 90% propellant by mass.
+///
+/// # Returns
+///
+/// The theoretical delta-v achievable in a vacuum with no gravity losses.
+///
+/// # Examples
+///
+/// ```
+/// use tsi::units::{Isp, Ratio};
+/// use tsi::physics::delta_v;
+///
+/// // A stage with Isp 350s and mass ratio 8 (87.5% propellant)
+/// let dv = delta_v(Isp::seconds(350.0), Ratio::new(8.0));
+/// // Δv = 350 × 9.80665 × ln(8) ≈ 7,138 m/s
+/// assert!(dv.as_mps() > 7_000.0);
+/// ```
+///
+/// # Real-World Context
+///
+/// - Low Earth Orbit requires ~9,400 m/s total delta-v
+/// - Falcon 9 first stage: ~8,500 m/s ideal delta-v
+/// - The Moon landing (Apollo): ~15,000 m/s total mission delta-v
 pub fn delta_v(isp: Isp, mass_ratio: Ratio) -> Velocity {
+    // The natural logarithm captures the diminishing returns of adding more
+    // propellant: each additional kg of fuel also adds weight that must be
+    // accelerated, so you never get linear scaling.
     Velocity::mps(isp.as_seconds() * G0 * mass_ratio.as_f64().ln())
 }
 
-/// Calculate required mass ratio to achieve a given delta-v.
+/// Calculate the required mass ratio to achieve a given delta-v.
 ///
-/// Inverse of the Tsiolkovsky equation.
+/// This is the inverse of the Tsiolkovsky equation, useful for mission
+/// planning: "Given my engine and required delta-v, how much propellant
+/// do I need?"
+///
+/// # Formula
+///
+/// ```text
+/// mass_ratio = e^(Δv / (Isp × g₀))
+/// ```
+///
+/// # Arguments
+///
+/// * `dv` - Target delta-v to achieve
+/// * `isp` - Specific impulse of the engine
+///
+/// # Returns
+///
+/// The mass ratio required. Values above ~20 are very challenging to build.
+///
+/// # Examples
+///
+/// ```
+/// use tsi::units::{Isp, Velocity};
+/// use tsi::physics::required_mass_ratio;
+///
+/// // What mass ratio do we need for 3,000 m/s with a 350s Isp engine?
+/// let ratio = required_mass_ratio(Velocity::mps(3000.0), Isp::seconds(350.0));
+/// // e^(3000 / (350 × 9.80665)) ≈ 2.41
+/// assert!(ratio.as_f64() > 2.0 && ratio.as_f64() < 3.0);
+/// ```
+///
+/// # Design Implications
+///
+/// - Mass ratio < 5: Relatively easy to build
+/// - Mass ratio 5-10: Challenging but achievable (most orbital rockets)
+/// - Mass ratio 10-20: Very difficult, requires advanced materials
+/// - Mass ratio > 20: Essentially impossible with current technology
 pub fn required_mass_ratio(dv: Velocity, isp: Isp) -> Ratio {
+    // This is simply solving Δv = Isp × g₀ × ln(R) for R:
+    // ln(R) = Δv / (Isp × g₀)
+    // R = e^(Δv / (Isp × g₀))
     Ratio::new((dv.as_mps() / (isp.as_seconds() * G0)).exp())
 }
 
