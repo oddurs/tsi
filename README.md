@@ -6,6 +6,7 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 
 ## Features
 
+- **Two-stage optimization** - Find optimal staging for any delta-v target
 - **Stage performance calculations** - Delta-v, burn time, TWR
 - **Built-in engine database** - 11 real rocket engines with accurate specs
 - **Type-safe physics** - Compile-time unit safety prevents calculation errors
@@ -63,6 +64,37 @@ Raptor-Vacuum    LOX/CH4           2,550 kN      380s      1,600 kg
 BE-4             LOX/CH4           2,600 kN      340s      2,000 kg
 ```
 
+### Optimize a two-stage rocket
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
+
+═══════════════════════════════════════════════════════════════
+  tsi — Staging Optimization Complete
+═══════════════════════════════════════════════════════════════
+
+  Target Δv:  9,400 m/s    Payload:  5,000 kg
+  Solution:   2-stage    Total mass:  205,430 kg
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  STAGE 2 (upper)                                            │
+  │  Engine:     Raptor-2 (×1)                                  │
+  │  Propellant: 26,534 kg (LOX/CH4)                            │
+  │  Δv:         4,794 m/s                                      │
+  └─────────────────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────┐
+  │  STAGE 1 (booster)                                          │
+  │  Engine:     Raptor-2 (×2)                                  │
+  │  Propellant: 154,605 kg (LOX/CH4)                           │
+  │  Δv:         4,794 m/s                                      │
+  └─────────────────────────────────────────────────────────────┘
+
+  Payload fraction:  2.43%
+  Delta-v margin:    +188 m/s (2.0%)
+
+═══════════════════════════════════════════════════════════════
+```
+
 ### Compact output for scripting
 
 ```bash
@@ -74,6 +106,7 @@ $ tsi calculate --engine raptor-2 --propellant-mass 100000 -o compact
 
 | Command | Description |
 |---------|-------------|
+| `tsi optimize` | Find optimal staging for a delta-v target |
 | `tsi calculate` | Calculate delta-v for a single stage |
 | `tsi engines` | List available rocket engines |
 
@@ -137,7 +170,7 @@ tsi engines --output json | jq '.[] | select(.propellant == "LoxCh4")'
 
 - [x] v0.1 - Foundation (unit types, physics, basic CLI)
 - [x] v0.2 - Engine database and enhanced calculations
-- [ ] v0.3 - Multi-stage optimization (`tsi optimize`)
+- [x] v0.3 - Two-stage optimization (`tsi optimize`)
 - [ ] v0.4 - Multiple engine types per rocket
 - [ ] v0.5 - Monte Carlo uncertainty analysis
 

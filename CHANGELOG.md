@@ -7,37 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-01-15
+
 ### Added
 
-- **Property-based tests** using proptest (10 tests in `tests/properties.rs`)
+- **Two-stage optimization** with `tsi optimize` command
+  - Analytical optimizer using Lagrange multiplier solution
+  - Optimal staging theory: equal delta-v split for identical engines
+  - 2% margin on target delta-v for robustness
+  - JSON output support with `--output json`
+
+- **Rocket type** for multi-stage vehicle analysis
+  - Total delta-v aggregation across stages
+  - Payload fraction calculation
+  - Liftoff TWR validation
+  - Mass above each stage tracking
+
+- **Constraints and Problem types** for optimization
+  - Configurable min TWR for liftoff and upper stages
+  - Maximum stage count (currently limited to 2)
+  - Structural ratio configuration
+
+- **Terminal output formatting** with Unicode box drawing
+  - Professional stage-by-stage breakdown
+  - Payload fraction and margin display
+  - Consistent formatting with thousands separators
+
+- **Property-based tests** using proptest (10 tests)
   - Mass addition commutativity
   - Delta-v monotonicity with mass ratio and Isp
   - Round-trip conversions for units
-  - Tsiolkovsky equation inverse verification
 
-- **Validation tests** against real rocket data (10 tests in `tests/validation.rs`)
-  - Saturn V S-IC and S-II stages
-  - Falcon 9 first and second stages
-  - Space Shuttle SRB
-  - Starship Super Heavy
-  - Optimal staging theory verification
+- **Validation tests** against real rocket data (10 tests)
+  - Saturn V, Falcon 9, Space Shuttle, Starship verification
+  - Optimal staging theory validation
 
-- **Comprehensive documentation comments** throughout codebase
-  - Physics module: Tsiolkovsky equation explanation, TWR and burn time formulas
-  - Units module: Type safety rationale, reference tables for typical values
-  - Engine module: Sea level vs vacuum performance, propellant trade-offs
-  - Stage module: Mass breakdown terminology, structural ratio guidelines
-
-- **Doc tests** for all public API examples (16 doc tests)
+- **Doc tests** for all public API examples (21 doc tests)
 
 ### Changed
 
-- Total test count: 144 tests (85 unit + 23 integration + 10 property + 10 validation + 16 doc)
+- Total test count: 168 tests (117 unit + 31 CLI + 10 property + 10 validation + 21 doc)
+- Refactored pretty output to use dedicated terminal module
 
 ### Fixed
 
-- Clippy warnings for `module_inception` and `manual_contains`
-- Doc test compilation errors for `EngineDatabase::load_embedded()` Result handling
+- Optimizer test import issues
+- Doc test assertions for realistic delta-v values
 
 ## [0.2.0] - 2025-01-15
 
@@ -123,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT license
 - Validates against Falcon 9 stage parameters
 
-[Unreleased]: https://github.com/yourusername/tsi/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/yourusername/tsi/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/yourusername/tsi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yourusername/tsi/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yourusername/tsi/releases/tag/v0.1.0

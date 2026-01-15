@@ -95,38 +95,41 @@
 
 ---
 
-## Phase 3: Two-Stage Optimization
+## Phase 3: Two-Stage Optimization ✅ COMPLETE (v0.3.0)
 **Goal:** Analytical optimizer for simple two-stage rockets
 
 ### 3.1 Rocket Type
-- [ ] Define `Rocket` struct (stages + payload)
-- [ ] Implement total_delta_v aggregation
-- [ ] Implement total_mass calculation
-- [ ] Implement payload_fraction
+- [x] Define `Rocket` struct (stages + payload)
+- [x] Implement total_delta_v aggregation
+- [x] Implement total_mass calculation
+- [x] Implement payload_fraction
+- [x] Implement liftoff_twr and validate_twr
 
 ### 3.2 Constraints
-- [ ] Define `Constraints` struct
-- [ ] Minimum TWR at each stage ignition
-- [ ] Maximum number of stages
-- [ ] Structural mass ratio
+- [x] Define `Constraints` struct
+- [x] Minimum TWR at each stage ignition
+- [x] Maximum number of stages
+- [x] Structural mass ratio
 
 ### 3.3 Analytical Optimizer
-- [ ] Implement Lagrange multiplier solution for 2 stages
-- [ ] Handle same-engine case (closed form)
-- [ ] Validate against textbook optimal staging ratios
-- [ ] Return `Solution` with rocket config and margin
+- [x] Implement Lagrange multiplier solution for 2 stages
+- [x] Handle same-engine case (closed form)
+- [x] Validate against textbook optimal staging ratios
+- [x] Return `Solution` with rocket config and margin
+- [x] 2% margin for robustness
 
 ### 3.4 Optimize Command
-- [ ] Implement `tsi optimize` subcommand
-- [ ] Accept: --payload, --target-dv, --engine, --min-twr
-- [ ] Run analytical optimizer
-- [ ] Output full solution breakdown
+- [x] Implement `tsi optimize` subcommand
+- [x] Accept: --payload, --target-dv, --engine, --min-twr
+- [x] Run analytical optimizer
+- [x] Output full solution breakdown
+- [x] Add `--output json` for machine-readable output
 
 ### 3.5 Pretty Output
-- [ ] Design terminal output format with box drawing
-- [ ] Show stage-by-stage breakdown
-- [ ] Show payload fraction and margin
-- [ ] Color output for key metrics (optional, detect tty)
+- [x] Design terminal output format with box drawing
+- [x] Show stage-by-stage breakdown
+- [x] Show payload fraction and margin
+- [ ] Color output for key metrics (optional, detect tty) - deferred
 
 **Deliverable:** `tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2` outputs optimal 2-stage configuration.
 

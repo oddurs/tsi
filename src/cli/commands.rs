@@ -1,10 +1,15 @@
 use anyhow::{bail, Result};
 
 use crate::engine::EngineDatabase;
+use crate::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+use crate::output::terminal;
 use crate::physics::{burn_time, delta_v, twr, G0};
-use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio};
+use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
-use super::args::{CalculateArgs, CalculateOutputFormat, EnginesArgs, OutputFormat};
+use super::args::{
+    CalculateArgs, CalculateOutputFormat, EnginesArgs, OptimizeArgs, OptimizeOutputFormat,
+    OutputFormat,
+};
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
     // Validate inputs first - collect all errors
@@ -297,5 +302,136 @@ pub fn engines(args: EnginesArgs) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Optimize staging for a rocket.
+pub fn optimize(args: OptimizeArgs) -> Result<()> {
+    // Validate inputs
+    let mut errors = Vec::new();
+
+    if args.payload <= 0.0 {
+        errors.push("--payload must be positive".to_string());
+    }
+    if args.target_dv <= 0.0 {
+        errors.push("--target-dv must be positive".to_string());
+    }
+    if args.min_twr < 1.0 {
+        errors.push("--min-twr must be >= 1.0 for liftoff".to_string());
+    }
+    if args.min_upper_twr <= 0.0 {
+        errors.push("--min-upper-twr must be positive".to_string());
+    }
+    if args.max_stages == 0 {
+        errors.push("--max-stages must be at least 1".to_string());
+    }
+    if args.structural_ratio <= 0.0 || args.structural_ratio >= 1.0 {
+        errors.push("--structural-ratio must be between 0 and 1".to_string());
+    }
+
+    if !errors.is_empty() {
+        let mut msg = "Invalid arguments:\n".to_string();
+        for e in &errors {
+            msg.push_str(&format!("  - {}\n", e));
+        }
+        bail!("{}", msg.trim_end());
+    }
+
+    // Load engine database and look up engine
+    let db = EngineDatabase::default();
+    let engine = db.get(&args.engine).ok_or_else(|| {
+        let mut msg = format!("Unknown engine: '{}'", args.engine);
+        let suggestions = db.suggest(&args.engine);
+        if !suggestions.is_empty() {
+            msg.push_str("\n\nDid you mean:");
+            for s in suggestions {
+                msg.push_str(&format!("\n  {}", s));
+            }
+        }
+        msg.push_str("\n\nRun `tsi engines` to see all available engines.");
+        anyhow::anyhow!(msg)
+    })?;
+
+    // Build constraints
+    let constraints = Constraints::new(
+        Ratio::new(args.min_twr),
+        Ratio::new(args.min_upper_twr),
+        args.max_stages,
+        Ratio::new(args.structural_ratio),
+    );
+
+    // Build problem
+    let problem = Problem::new(
+        Mass::kg(args.payload),
+        Velocity::mps(args.target_dv),
+        vec![engine.clone()],
+        constraints,
+    )
+    .with_stage_count(2); // Currently only supporting 2 stages
+
+    // Run optimizer
+    let optimizer = AnalyticalOptimizer;
+    let solution = optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    // Output results
+    match args.output {
+        OptimizeOutputFormat::Pretty => {
+            print_solution_pretty(&args, &solution);
+        }
+        OptimizeOutputFormat::Json => {
+            print_solution_json(&args, &solution)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
+    terminal::print_solution_with_options(
+        args.target_dv,
+        args.payload,
+        solution,
+        args.gravity.as_mps2(),
+        args.sea_level,
+    );
+}
+
+fn print_solution_json(
+    args: &OptimizeArgs,
+    solution: &crate::optimizer::Solution,
+) -> Result<()> {
+    let rocket = &solution.rocket;
+    let stages = rocket.stages();
+
+    let stages_json: Vec<_> = stages
+        .iter()
+        .enumerate()
+        .map(|(i, stage)| {
+            serde_json::json!({
+                "stage": i + 1,
+                "engine": stage.engine().name,
+                "engine_count": stage.engine_count(),
+                "propellant_kg": stage.propellant_mass().as_kg(),
+                "dry_mass_kg": stage.dry_mass().as_kg(),
+                "wet_mass_kg": stage.wet_mass().as_kg(),
+                "delta_v_mps": rocket.stage_delta_v(i).as_mps(),
+                "burn_time_s": stage.burn_time().as_seconds(),
+                "twr": rocket.stage_twr(i).as_f64(),
+            })
+        })
+        .collect();
+
+    let output = serde_json::json!({
+        "target_delta_v_mps": args.target_dv,
+        "payload_kg": args.payload,
+        "total_mass_kg": rocket.total_mass().as_kg(),
+        "total_delta_v_mps": rocket.total_delta_v().as_mps(),
+        "payload_fraction": rocket.payload_fraction().as_f64(),
+        "margin_mps": solution.margin.as_mps(),
+        "margin_percent": solution.margin_percent(Velocity::mps(args.target_dv)),
+        "stages": stages_json,
+    });
+
+    println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
