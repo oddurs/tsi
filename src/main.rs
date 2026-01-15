@@ -1,6 +1,12 @@
 use anyhow::Result;
+use clap::Parser;
+
+use tsi::cli::{commands, Cli, Command};
 
 fn main() -> Result<()> {
-    println!("tsi - Rocket staging optimizer");
-    Ok(())
+    let cli = Cli::parse();
+
+    match cli.command {
+        Command::Calculate(args) => commands::calculate(args),
+    }
 }
