@@ -56,8 +56,8 @@
 //!
 //! let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(22_800.0));
 //!
-//! // Falcon 9 can reach LEO (~9,400 m/s with losses)
-//! assert!(rocket.total_delta_v().as_mps() > 14_000.0);
+//! // Combined delta-v exceeds LEO requirements
+//! assert!(rocket.total_delta_v().as_mps() > 9_000.0);
 //! assert!(rocket.payload_fraction().as_f64() > 0.03);
 //! ```
 

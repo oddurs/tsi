@@ -340,6 +340,7 @@ impl Optimizer for AnalyticalOptimizer {
 mod tests {
     use super::*;
     use crate::engine::EngineDatabase;
+    use crate::optimizer::Constraints;
 
     fn get_raptor() -> Engine {
         let db = EngineDatabase::default();
