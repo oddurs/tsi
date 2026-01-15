@@ -3,6 +3,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+#[allow(deprecated)]
 fn tsi() -> Command {
     Command::cargo_bin("tsi").unwrap()
 }
