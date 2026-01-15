@@ -1,36 +1,300 @@
 use anyhow::{bail, Result};
 
-use crate::physics::{burn_time, delta_v};
-use crate::units::{Force, Isp, Mass, Ratio};
+use crate::engine::EngineDatabase;
+use crate::physics::{burn_time, delta_v, twr, G0};
+use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio};
 
-use super::args::CalculateArgs;
+use super::args::{CalculateArgs, CalculateOutputFormat, EnginesArgs, OutputFormat};
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
-    let isp = Isp::seconds(args.isp);
+    // Validate inputs first - collect all errors
+    let mut errors = Vec::new();
 
-    let mass_ratio = match args.get_mass_ratio() {
-        Some(r) => Ratio::new(r),
-        None => bail!("Must provide either --mass-ratio or both --wet-mass and --dry-mass"),
+    if let Some(isp) = args.isp {
+        if isp <= 0.0 {
+            errors.push("--isp must be positive".to_string());
+        }
+    }
+    if let Some(ratio) = args.mass_ratio {
+        if ratio <= 1.0 {
+            errors.push("--mass-ratio must be greater than 1.0 (wet > dry)".to_string());
+        }
+    }
+    if let Some(wet) = args.wet_mass {
+        if wet <= 0.0 {
+            errors.push("--wet-mass must be positive".to_string());
+        }
+    }
+    if let Some(dry) = args.dry_mass {
+        if dry <= 0.0 {
+            errors.push("--dry-mass must be positive".to_string());
+        }
+    }
+    if let (Some(wet), Some(dry)) = (args.wet_mass, args.dry_mass) {
+        if wet <= dry {
+            errors.push("--wet-mass must be greater than --dry-mass".to_string());
+        }
+    }
+    if let Some(prop) = args.propellant_mass {
+        if prop <= 0.0 {
+            errors.push("--propellant-mass must be positive".to_string());
+        }
+    }
+    if let Some(thrust) = args.thrust {
+        if thrust <= 0.0 {
+            errors.push("--thrust must be positive".to_string());
+        }
+    }
+    if args.structural_ratio < 0.0 || args.structural_ratio >= 1.0 {
+        errors.push("--structural-ratio must be between 0 and 1".to_string());
+    }
+    if args.engine_count == 0 {
+        errors.push("--engine-count must be at least 1".to_string());
+    }
+
+    if !errors.is_empty() {
+        let mut msg = "Invalid arguments:\n".to_string();
+        for e in &errors {
+            msg.push_str(&format!("  - {}\n", e));
+        }
+        bail!("{}", msg.trim_end());
+    }
+
+    let db = EngineDatabase::default();
+
+    // Determine Isp and thrust from either --engine or explicit values
+    let (isp, thrust, engine_name, propellant_name) = if let Some(ref engine_name) = args.engine {
+        let engine = db.get(engine_name).ok_or_else(|| {
+            let mut msg = format!("Unknown engine: '{}'", engine_name);
+            let suggestions = db.suggest(engine_name);
+            if !suggestions.is_empty() {
+                msg.push_str("\n\nDid you mean:");
+                for s in suggestions {
+                    msg.push_str(&format!("\n  {}", s));
+                }
+            }
+            msg.push_str("\n\nRun `tsi engines` to see all available engines.");
+            anyhow::anyhow!(msg)
+        })?;
+
+        let isp = engine.isp_vac();
+        let thrust = engine.thrust_vac() * args.engine_count;
+        let name = if args.engine_count > 1 {
+            format!("{} (×{})", engine.name, args.engine_count)
+        } else {
+            engine.name.clone()
+        };
+        (
+            isp,
+            Some(thrust),
+            Some(name),
+            Some(engine.propellant.name().to_string()),
+        )
+    } else if let Some(isp_s) = args.isp {
+        let thrust = args.thrust.map(Force::newtons);
+        (Isp::seconds(isp_s), thrust, None, None)
+    } else {
+        bail!("Must provide either --engine or --isp");
     };
 
-    let dv = delta_v(isp, mass_ratio);
-
-    println!("Δv:         {}", dv);
-    println!("Mass ratio: {}", mass_ratio);
-
-    // If thrust is provided, calculate burn time
-    if let Some(thrust_n) = args.thrust {
-        let thrust = Force::newtons(thrust_n);
-
-        let propellant = match args.get_propellant_mass() {
-            Some(p) => Mass::kg(p),
-            None => bail!(
-                "Burn time requires propellant mass. Provide --wet-mass/--dry-mass or --propellant-mass"
-            ),
+    // Calculate mass ratio and related values
+    if let Some(propellant_kg) = args.propellant_mass {
+        // Engine-based calculation with propellant mass
+        let propellant = Mass::kg(propellant_kg);
+        let structural = Mass::kg(propellant_kg * args.structural_ratio);
+        let engine_mass = if let Some(ref name) = args.engine {
+            let engine = db.get(name).unwrap();
+            engine.dry_mass() * args.engine_count
+        } else {
+            Mass::kg(0.0)
         };
+        let dry_mass = structural + engine_mass;
+        let wet_mass = dry_mass + propellant;
+        let mass_ratio = wet_mass / dry_mass;
 
-        let time = burn_time(propellant, thrust, isp);
-        println!("Burn time:  {}", time);
+        let dv = delta_v(isp, mass_ratio);
+
+        match args.output {
+            CalculateOutputFormat::Compact => {
+                // Compact one-line output
+                let mut parts = vec![format!("Δv: {}", dv)];
+                if let Some(thrust) = thrust {
+                    let time = burn_time(propellant, thrust, isp);
+                    let twr_val = twr(thrust, wet_mass, G0);
+                    parts.push(format!("Burn: {}s", time.as_seconds() as u32));
+                    parts.push(format!("TWR: {:.2}", twr_val.as_f64()));
+                }
+                println!("{}", parts.join(" | "));
+            }
+            CalculateOutputFormat::Pretty => {
+                // Pretty multi-line output
+                if let Some(name) = engine_name {
+                    println!("Engine:     {}", name);
+                }
+                if let Some(prop) = propellant_name {
+                    println!(
+                        "Propellant: {} kg ({})",
+                        format_thousands_f64(propellant.as_kg()),
+                        prop
+                    );
+                } else {
+                    println!(
+                        "Propellant: {} kg",
+                        format_thousands_f64(propellant.as_kg())
+                    );
+                }
+                println!("Dry mass:   {} kg", format_thousands_f64(dry_mass.as_kg()));
+                println!("Δv:         {}", dv);
+
+                if let Some(thrust) = thrust {
+                    let time = burn_time(propellant, thrust, isp);
+                    let twr_val = twr(thrust, wet_mass, G0);
+                    println!("Burn time:  {}", time);
+                    println!("TWR (vac):  {:.2}", twr_val.as_f64());
+                }
+            }
+        }
+    } else if let Some(ratio) = args.get_mass_ratio() {
+        // Simple mass ratio calculation (original behavior)
+        let mass_ratio = Ratio::new(ratio);
+        let dv = delta_v(isp, mass_ratio);
+
+        match args.output {
+            CalculateOutputFormat::Compact => {
+                let mut parts = vec![format!("Δv: {}", dv)];
+                if let Some(thrust) = thrust {
+                    let propellant = match args.get_propellant_mass() {
+                        Some(p) => Mass::kg(p),
+                        None => bail!(
+                            "Burn time requires propellant mass. Provide --wet-mass/--dry-mass or --propellant-mass"
+                        ),
+                    };
+                    let time = burn_time(propellant, thrust, isp);
+                    parts.push(format!("Burn: {}s", time.as_seconds() as u32));
+                }
+                println!("{}", parts.join(" | "));
+            }
+            CalculateOutputFormat::Pretty => {
+                println!("Δv:         {}", dv);
+                println!("Mass ratio: {}", mass_ratio);
+
+                // If thrust is provided, calculate burn time
+                if let Some(thrust) = thrust {
+                    let propellant = match args.get_propellant_mass() {
+                        Some(p) => Mass::kg(p),
+                        None => bail!(
+                            "Burn time requires propellant mass. Provide --wet-mass/--dry-mass or --propellant-mass"
+                        ),
+                    };
+
+                    let time = burn_time(propellant, thrust, isp);
+                    println!("Burn time:  {}", time);
+                }
+            }
+        }
+    } else {
+        bail!("Must provide --propellant-mass, --mass-ratio, or --wet-mass/--dry-mass");
+    }
+
+    Ok(())
+}
+
+pub fn engines(args: EnginesArgs) -> Result<()> {
+    let db = EngineDatabase::default();
+    let all_engines = db.list();
+
+    // Apply filters
+    let engines: Vec<_> = all_engines
+        .iter()
+        .filter(|e| {
+            // Filter by propellant
+            if let Some(ref prop_filter) = args.propellant {
+                if !e.propellant.matches(prop_filter) {
+                    return false;
+                }
+            }
+            // Filter by name
+            if let Some(ref name_filter) = args.name {
+                if !e.name.to_lowercase().contains(&name_filter.to_lowercase()) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    if engines.is_empty() {
+        let mut msg = "No engines found".to_string();
+        if args.propellant.is_some() || args.name.is_some() {
+            msg.push_str(" matching the filter");
+        }
+        msg.push_str(".\nRun `tsi engines` to see all available engines.");
+        bail!("{}", msg);
+    }
+
+    match args.output {
+        OutputFormat::Table => {
+            if args.verbose {
+                // Verbose output with sea-level values
+                println!(
+                    "{:<16} {:<12} {:>10} {:>10} {:>8} {:>8} {:>10}",
+                    "NAME",
+                    "PROPELLANT",
+                    "THRUST(vac)",
+                    "THRUST(sl)",
+                    "ISP(vac)",
+                    "ISP(sl)",
+                    "MASS"
+                );
+                println!("{}", "-".repeat(84));
+                for engine in &engines {
+                    let thrust_sl = if engine.thrust_sl().as_newtons() > 0.0 {
+                        format!(
+                            "{} kN",
+                            format_thousands_f64(engine.thrust_sl().as_kilonewtons())
+                        )
+                    } else {
+                        "-".to_string()
+                    };
+                    let isp_sl = if engine.isp_sl().as_seconds() > 0.0 {
+                        format!("{}s", engine.isp_sl().as_seconds() as u32)
+                    } else {
+                        "-".to_string()
+                    };
+                    println!(
+                        "{:<16} {:<12} {:>8} kN {:>10} {:>7}s {:>8} {:>10} kg",
+                        engine.name,
+                        engine.propellant.name(),
+                        format_thousands_f64(engine.thrust_vac().as_kilonewtons()),
+                        thrust_sl,
+                        engine.isp_vac().as_seconds() as u32,
+                        isp_sl,
+                        format_thousands_f64(engine.dry_mass().as_kg()),
+                    );
+                }
+            } else {
+                // Standard output
+                println!(
+                    "{:<16} {:<12} {:>12} {:>10} {:>10}",
+                    "NAME", "PROPELLANT", "THRUST(vac)", "ISP(vac)", "MASS"
+                );
+                println!("{}", "-".repeat(62));
+                for engine in &engines {
+                    println!(
+                        "{:<16} {:<12} {:>10} kN {:>8}s {:>10} kg",
+                        engine.name,
+                        engine.propellant.name(),
+                        format_thousands_f64(engine.thrust_vac().as_kilonewtons()),
+                        engine.isp_vac().as_seconds() as u32,
+                        format_thousands_f64(engine.dry_mass().as_kg()),
+                    );
+                }
+            }
+        }
+        OutputFormat::Json => {
+            let json = serde_json::to_string_pretty(&engines)?;
+            println!("{}", json);
+        }
     }
 
     Ok(())
