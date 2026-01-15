@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `tsi` (Tsiolkovsky) is a Rust CLI tool for rocket staging optimization. Given payload mass, target delta-v, and available engines, it finds optimal staging configurations that maximize payload fraction or minimize total mass.
 
-**Current Status:** Phase 2 complete (v0.2.0). Working CLI with engine database, stage calculations, and comprehensive test suite (144 tests).
+**Current Status:** Phase 3 complete (v0.3.0). Working CLI with engine database, two-stage optimization, and comprehensive test suite (168 tests).
 
 ## Build Commands
 
@@ -42,12 +42,12 @@ The tool is designed as a Rust library + CLI application:
 - Property-based testing with proptest for physics invariants
 - Validation tests against real rockets (Saturn V, Falcon 9, Space Shuttle)
 
-### Test Suite (144 tests)
-- **85 unit tests** - Inline in source modules
-- **23 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
+### Test Suite (168 tests)
+- **117 unit tests** - Inline in source modules
+- **31 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
 - **10 property tests** - Invariants via proptest (`tests/properties.rs`)
 - **10 validation tests** - Real rocket comparisons (`tests/validation.rs`)
-- **16 doc tests** - Examples in rustdoc comments
+- **21 doc tests** - Examples in rustdoc comments
 
 ## Development Roadmap
 
