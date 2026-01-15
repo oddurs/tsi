@@ -12,6 +12,7 @@ categories = ["command-line-utilities", "science", "simulation"]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+serde_json = "1"
 anyhow = "1"
 thiserror = "2"
 rand = "0.8"
@@ -23,7 +24,6 @@ approx = "0.5"
 assert_cmd = "2"
 predicates = "3"
 proptest = "1"
-serde_json = "1"
 
 [[bench]]
 name = "optimizer"
