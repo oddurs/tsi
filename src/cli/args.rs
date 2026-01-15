@@ -177,9 +177,39 @@ pub struct OptimizeArgs {
     #[arg(long, default_value = "0.08")]
     pub structural_ratio: f64,
 
+    /// Use sea-level thrust/ISP for first stage TWR calculation
+    #[arg(long)]
+    pub sea_level: bool,
+
+    /// Surface gravity (affects TWR calculation)
+    #[arg(long, value_enum, default_value = "earth")]
+    pub gravity: Gravity,
+
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: OptimizeOutputFormat,
+}
+
+/// Surface gravity for different planetary bodies.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Gravity {
+    /// Earth: 9.80665 m/s²
+    Earth,
+    /// Mars: 3.72076 m/s²
+    Mars,
+    /// Moon: 1.62 m/s²
+    Moon,
+}
+
+impl Gravity {
+    /// Get the surface gravity in m/s².
+    pub fn as_mps2(&self) -> f64 {
+        match self {
+            Gravity::Earth => 9.80665,
+            Gravity::Mars => 3.72076,
+            Gravity::Moon => 1.62,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]

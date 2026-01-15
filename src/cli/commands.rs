@@ -387,7 +387,13 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
-    terminal::print_solution(args.target_dv, args.payload, solution);
+    terminal::print_solution_with_options(
+        args.target_dv,
+        args.payload,
+        solution,
+        args.gravity.as_mps2(),
+        args.sea_level,
+    );
 }
 
 fn print_solution_json(
