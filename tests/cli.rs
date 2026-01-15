@@ -339,3 +339,157 @@ fn engines_verbose_shows_sl_values() {
         .stdout(predicate::str::contains("THRUST(sl)"))
         .stdout(predicate::str::contains("ISP(sl)"));
 }
+
+// ============================================================================
+// Optimize command
+// ============================================================================
+
+#[test]
+fn optimize_basic() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Staging Optimization Complete"))
+        .stdout(predicate::str::contains("STAGE 1"))
+        .stdout(predicate::str::contains("STAGE 2"))
+        .stdout(predicate::str::contains("Payload fraction"));
+}
+
+#[test]
+fn optimize_json_output() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--output",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"total_mass_kg\""))
+        .stdout(predicate::str::contains("\"stages\""))
+        .stdout(predicate::str::contains("\"margin_mps\""));
+}
+
+#[test]
+fn optimize_json_is_valid() {
+    let output = tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--output",
+            "json",
+        ])
+        .output()
+        .expect("failed to run");
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("invalid JSON output");
+    assert!(json["total_mass_kg"].is_number());
+    assert!(json["stages"].is_array());
+    assert_eq!(json["stages"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn optimize_unknown_engine_fails() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "not-an-engine",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unknown engine"));
+}
+
+#[test]
+fn optimize_missing_payload_fails() {
+    tsi()
+        .args([
+            "optimize",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--payload"));
+}
+
+#[test]
+fn optimize_with_custom_twr() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--min-twr",
+            "1.3",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_with_merlin() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "10000",
+            "--target-dv",
+            "8000",
+            "--engine",
+            "merlin-1d",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Merlin-1D"));
+}
+
+#[test]
+fn optimize_engine_case_insensitive() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "RAPTOR-2",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Raptor-2"));
+}

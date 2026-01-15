@@ -7,8 +7,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 #[command(after_help = "\
 Examples:
   tsi calculate --engine raptor-2 --propellant-mass 100000
-  tsi engines --propellant methane
-  tsi engines --verbose")]
+  tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
+  tsi engines --propellant methane")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -24,6 +24,14 @@ Examples:
   tsi calculate --isp 311 --mass-ratio 3.5
   tsi calculate --isp 350 --wet-mass 100000 --dry-mass 10000")]
     Calculate(CalculateArgs),
+
+    /// Optimize staging for a rocket
+    #[command(after_help = "\
+Examples:
+  tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
+  tsi optimize --payload 1000 --target-dv 8000 --engine merlin-1d --min-twr 1.3
+  tsi optimize --payload 10000 --target-dv 9400 --engine raptor-2 --output json")]
+    Optimize(OptimizeArgs),
 
     /// List available rocket engines
     #[command(after_help = "\
@@ -135,5 +143,49 @@ pub enum OutputFormat {
     /// Human-readable table
     Table,
     /// JSON array
+    Json,
+}
+
+/// Arguments for the optimize command.
+#[derive(Args)]
+pub struct OptimizeArgs {
+    /// Payload mass in kg
+    #[arg(short, long)]
+    pub payload: f64,
+
+    /// Target delta-v in m/s
+    #[arg(short = 'd', long)]
+    pub target_dv: f64,
+
+    /// Engine name from database
+    #[arg(short, long)]
+    pub engine: String,
+
+    /// Minimum thrust-to-weight ratio at liftoff
+    #[arg(long, default_value = "1.2")]
+    pub min_twr: f64,
+
+    /// Minimum TWR for upper stages (can be < 1.0 in vacuum)
+    #[arg(long, default_value = "0.5")]
+    pub min_upper_twr: f64,
+
+    /// Maximum number of stages
+    #[arg(long, default_value = "2")]
+    pub max_stages: u32,
+
+    /// Structural mass ratio (structural / propellant)
+    #[arg(long, default_value = "0.08")]
+    pub structural_ratio: f64,
+
+    /// Output format
+    #[arg(short, long, value_enum, default_value = "pretty")]
+    pub output: OptimizeOutputFormat,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum OptimizeOutputFormat {
+    /// Detailed pretty-printed output
+    Pretty,
+    /// JSON output
     Json,
 }
