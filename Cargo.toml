@@ -1,0 +1,30 @@
+[package]
+name = "tsi"
+version = "0.1.0"
+edition = "2021"
+description = "Rocket staging optimizer"
+license = "MIT"
+repository = "https://github.com/yourusername/tsi"
+keywords = ["rocket", "space", "aerospace", "optimization"]
+categories = ["command-line-utilities", "science", "simulation"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+anyhow = "1"
+thiserror = "2"
+rand = "0.8"
+rayon = "1"
+
+[dev-dependencies]
+criterion = "0.5"
+approx = "0.5"
+assert_cmd = "2"
+predicates = "3"
+proptest = "1"
+serde_json = "1"
+
+[[bench]]
+name = "optimizer"
+harness = false
