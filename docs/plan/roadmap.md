@@ -1,85 +1,95 @@
 # tsi Development Roadmap
 
-## Phase 1: Foundation
+## Phase 1: Foundation ✅ COMPLETE (v0.1.0)
 **Goal:** Working single-stage calculator with type-safe units
 
 ### 1.1 Project Setup
-- [ ] Initialize cargo project
-- [ ] Set up directory structure per architecture.md
-- [ ] Configure Cargo.toml with metadata and dependencies
-- [ ] Add MIT license
-- [ ] Create README.md with project description
+- [x] Initialize cargo project
+- [x] Set up directory structure per architecture.md
+- [x] Configure Cargo.toml with metadata and dependencies
+- [x] Add MIT license
+- [x] Create README.md with project description
 
 ### 1.2 Unit Types
-- [ ] Implement `Mass` newtype with kg/tonnes constructors
-- [ ] Implement `Velocity` newtype with m/s and km/s
-- [ ] Implement `Force` newtype for thrust (Newtons)
-- [ ] Implement `Time` newtype for durations
-- [ ] Implement `Isp` newtype for specific impulse
-- [ ] Implement `Ratio` for dimensionless values
-- [ ] Add arithmetic ops: Mass + Mass, Mass / Mass → Ratio, etc.
-- [ ] Add Display traits for pretty printing
-- [ ] Write unit tests for arithmetic correctness
+- [x] Implement `Mass` newtype with kg/tonnes constructors
+- [x] Implement `Velocity` newtype with m/s and km/s
+- [x] Implement `Force` newtype for thrust (Newtons)
+- [x] Implement `Time` newtype for durations
+- [x] Implement `Isp` newtype for specific impulse
+- [x] Implement `Ratio` for dimensionless values
+- [x] Add arithmetic ops: Mass + Mass, Mass / Mass → Ratio, etc.
+- [x] Add Display traits for pretty printing
+- [x] Write unit tests for arithmetic correctness
 
 ### 1.3 Physics Core
-- [ ] Implement Tsiolkovsky equation: `delta_v(isp, mass_ratio)`
-- [ ] Implement inverse: `required_mass_ratio(delta_v, isp)`
-- [ ] Implement TWR calculation
-- [ ] Implement burn time calculation
-- [ ] Validate against known values (Saturn V, Falcon 9)
+- [x] Implement Tsiolkovsky equation: `delta_v(isp, mass_ratio)`
+- [x] Implement inverse: `required_mass_ratio(delta_v, isp)`
+- [x] Implement TWR calculation
+- [x] Implement burn time calculation
+- [x] Validate against known values (Saturn V, Falcon 9)
 
 ### 1.4 Basic CLI
-- [ ] Set up clap with derive macros
-- [ ] Implement `tsi calculate` subcommand
-- [ ] Accept: --isp, --mass-ratio (or --wet-mass, --dry-mass)
-- [ ] Output: delta-v, burn time (if thrust provided)
-- [ ] Add --help with clear descriptions
+- [x] Set up clap with derive macros
+- [x] Implement `tsi calculate` subcommand
+- [x] Accept: --isp, --mass-ratio (or --wet-mass, --dry-mass)
+- [x] Output: delta-v, burn time (if thrust provided)
+- [x] Add --help with clear descriptions
 
 ### 1.5 First Release Checkpoint
-- [ ] All tests passing
-- [ ] `cargo clippy` clean
-- [ ] `cargo fmt` applied
-- [ ] Manual testing of calculate command
-- [ ] Tag v0.1.0
+- [x] All tests passing
+- [x] `cargo clippy` clean
+- [x] `cargo fmt` applied
+- [x] Manual testing of calculate command
+- [x] Tag v0.1.0
 
 **Deliverable:** `tsi calculate --isp 311 --wet-mass 550000 --dry-mass 26000` outputs delta-v
 
 ---
 
-## Phase 2: Engine Database
+## Phase 2: Engine Database ✅ COMPLETE (v0.2.0)
 **Goal:** Load real engine data, compute stage parameters
 
 ### 2.1 Engine Types
-- [ ] Define `Propellant` enum (LoxRp1, LoxLh2, LoxCh4, etc.)
-- [ ] Define `Engine` struct with all parameters
-- [ ] Implement `isp_at(pressure_ratio)` interpolation
-- [ ] Implement `thrust_at(pressure_ratio)` interpolation
+- [x] Define `Propellant` enum (LoxRp1, LoxLh2, LoxCh4, etc.)
+- [x] Define `Engine` struct with all parameters
+- [x] Implement `isp_at(pressure_ratio)` interpolation
+- [x] Implement `thrust_at(pressure_ratio)` interpolation
 
 ### 2.2 Data Loading
-- [ ] Create `data/engines.toml` with 8-10 common engines
-- [ ] Implement TOML deserialization with serde
-- [ ] Load from embedded data (include_str!) for binary distribution
-- [ ] Allow override via `--engines-file` flag
-- [ ] Handle missing/malformed data gracefully
+- [x] Create `data/engines.toml` with 11 common engines
+- [x] Implement TOML deserialization with serde
+- [x] Load from embedded data (include_str!) for binary distribution
+- [ ] Allow override via `--engines-file` flag (deferred)
+- [x] Handle missing/malformed data gracefully
 
 ### 2.3 Engine Listing
-- [ ] Implement `tsi engines` subcommand
-- [ ] List all available engines with key stats
-- [ ] Add `--verbose` for full parameter dump
-- [ ] Add `--json` for machine-readable output
+- [x] Implement `tsi engines` subcommand
+- [x] List all available engines with key stats
+- [x] Add `--verbose` for full parameter dump
+- [x] Add `--output json` for machine-readable output
+- [x] Add `--propellant` filter
+- [x] Add `--name` filter
 
 ### 2.4 Stage Type
-- [ ] Define `Stage` struct
-- [ ] Implement derived calculations (dry_mass, wet_mass, delta_v)
-- [ ] Implement TWR at ignition given payload mass
-- [ ] Implement burn time from stage parameters
+- [x] Define `Stage` struct
+- [x] Implement derived calculations (dry_mass, wet_mass, delta_v)
+- [x] Implement TWR at ignition given payload mass
+- [x] Implement burn time from stage parameters
 
 ### 2.5 Enhanced Calculate
-- [ ] Accept `--engine` flag to look up from database
-- [ ] Accept `--engine-count` for multiple engines
-- [ ] Accept `--propellant-mass` instead of mass ratio
-- [ ] Compute structural mass from configurable ratio
-- [ ] Output full stage summary
+- [x] Accept `--engine` flag to look up from database
+- [x] Accept `--engine-count` for multiple engines
+- [x] Accept `--propellant-mass` instead of mass ratio
+- [x] Compute structural mass from configurable ratio
+- [x] Output full stage summary
+- [x] Add `--output compact` for one-line output
+
+### 2.6 v0.2.0 Enhancements (bonus)
+- [x] Thousands separators in number output
+- [x] Integration tests (23 tests)
+- [x] Engine name suggestions on typos
+- [x] Multi-error validation messages
+- [x] Help text examples
 
 **Deliverable:** `tsi engines` lists Merlin-1D, Raptor-2, etc. `tsi calculate --engine raptor-2 --propellant-mass 100000` outputs stage performance.
 
@@ -235,15 +245,16 @@
 **Goal:** Public release on crates.io
 
 ### 7.1 Documentation
-- [ ] Comprehensive README with examples
-- [ ] API documentation (rustdoc)
-- [ ] CHANGELOG.md
+- [x] Comprehensive README with examples
+- [x] API documentation (rustdoc) with educational comments
+- [x] CHANGELOG.md
 - [ ] CONTRIBUTING.md
 
 ### 7.2 Testing
-- [ ] Unit test coverage > 80%
-- [ ] Integration tests for all commands
-- [ ] Property-based tests for physics
+- [x] Unit test coverage > 80% (85 unit tests)
+- [x] Integration tests for all commands (23 CLI tests)
+- [x] Property-based tests for physics (10 proptest tests)
+- [x] Validation tests against real rockets (10 tests)
 - [ ] CI pipeline (GitHub Actions)
 
 ### 7.3 Packaging

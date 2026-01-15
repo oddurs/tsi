@@ -1,5 +1,29 @@
 # tsi Documentation
 
+## Implementation Status
+
+| Documentation Type | Status | Notes |
+|-------------------|--------|-------|
+| README.md | ✅ Complete | Quick start, examples, installation |
+| CLI --help | ✅ Complete | All commands documented |
+| API docs (rustdoc) | ✅ Complete | Educational comments added to all modules |
+| Doc tests | ✅ Complete | 16 doc tests, all passing |
+| CHANGELOG.md | ✅ Complete | Follows Keep a Changelog format |
+| docs/getting-started.md | ✅ Complete | User guide |
+| docs/commands.md | ✅ Complete | CLI reference |
+| docs/engines.md | ✅ Complete | Engine database reference |
+| docs/physics.md | ✅ Complete | Physics background |
+| docs/examples.md | ✅ Complete | Usage examples |
+| CONTRIBUTING.md | ⏳ Planned | Contributor guide |
+
+### Recent Documentation Work
+
+- Added comprehensive educational comments to `physics/` module (Tsiolkovsky equation, TWR, burn time)
+- Added type safety explanations to `units/` module with reference tables
+- Added propellant trade-off documentation to `engine/` module
+- Added structural ratio guidelines to `stage/` module
+- Fixed all doc test compilation errors
+
 ## Overview
 
 Documentation for `tsi` lives in multiple places, serving different audiences:

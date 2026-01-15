@@ -4,29 +4,67 @@
 
 Testing a physics-based CLI tool requires validating both correctness (does the math work?) and usability (does the tool behave as expected?). This document outlines the testing approach for `tsi`.
 
+## Implementation Status
+
+| Category | Status | Count | Location |
+|----------|--------|-------|----------|
+| Unit Tests | ✅ Implemented | 85 | `src/**/mod.rs` |
+| Integration Tests | ✅ Implemented | 23 | `tests/cli.rs` |
+| Property-Based Tests | ✅ Implemented | 10 | `tests/properties.rs` |
+| Validation Tests | ✅ Implemented | 10 | `tests/validation.rs` |
+| Doc Tests | ✅ Implemented | 16 | Inline in source |
+| Regression Tests | ⏳ Planned | - | `tests/regression.rs` |
+| Benchmark Tests | ⏳ Planned | - | `benches/` |
+
+**Total: 144 tests passing**
+
 ## Test Categories
 
-### 1. Unit Tests
+### 1. Unit Tests ✅
 Location: Inline in source files (`#[cfg(test)]` modules)
 
 Test individual functions and types in isolation. These form the foundation — if the building blocks are wrong, everything else fails.
 
-### 2. Integration Tests
-Location: `tests/` directory
+### 2. Integration Tests ✅
+Location: `tests/cli.rs`
 
 Test the public API and CLI commands end-to-end. These verify that components work together correctly.
 
-### 3. Property-Based Tests
+### 3. Property-Based Tests ✅
 Location: `tests/properties.rs`
 
 Test invariants that should hold for any valid input. These catch edge cases that example-based tests miss.
 
-### 4. Validation Tests
+**Implemented properties:**
+- Mass addition commutativity
+- Mass addition/subtraction inverse
+- Delta-v positive for mass ratio > 1
+- Delta-v monotonic with mass ratio
+- Delta-v monotonic with Isp
+- Delta-v zero for mass ratio = 1
+- Mass ratio round-trip (delta_v → required_mass_ratio)
+- Velocity conversion round-trip (m/s ↔ km/s)
+- Mass conversion round-trip (kg ↔ tonnes)
+- Ratio scaling
+
+### 4. Validation Tests ✅
 Location: `tests/validation.rs`
 
 Compare against known real-world values (Saturn V, Falcon 9, etc.). These ensure the physics matches reality.
 
-### 5. Regression Tests
+**Implemented validations:**
+- Saturn V S-IC (first stage) ideal delta-v
+- Saturn V S-II (second stage) ideal delta-v
+- Falcon 9 first stage ideal delta-v
+- Falcon 9 second stage ideal delta-v
+- Falcon 9 total delta-v is LEO-capable
+- Falcon 9 liftoff TWR
+- Space Shuttle SRB ideal delta-v
+- Starship Super Heavy ideal delta-v
+- Merlin-1D burn time
+- Optimal staging equal delta-v theory
+
+### 5. Regression Tests ⏳
 Location: `tests/regression.rs`
 
 Capture specific bugs that were found and fixed. Prevent them from returning.
