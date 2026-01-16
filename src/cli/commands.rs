@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-use crate::engine::EngineDatabase;
+use crate::engine::{Engine, EngineDatabase, Propellant};
 use crate::optimizer::{
     AnalyticalOptimizer, BruteForceOptimizer, Constraints, MonteCarloRunner, Optimizer, Problem,
     Uncertainty,
@@ -346,8 +346,24 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let engine_names: Vec<&str> = args.engine.split(',').map(|s| s.trim()).collect();
     let mut engines = Vec::new();
 
-    // Helper to look up and validate an engine
-    let lookup_engine = |name: &str| -> Result<crate::engine::Engine> {
+    // Parse custom engines first (so they can be referenced by name)
+    let mut custom_engines: Vec<Engine> = Vec::new();
+    for spec in &args.custom_engine {
+        let engine = parse_custom_engine(spec)?;
+        custom_engines.push(engine);
+    }
+
+    // Helper to look up and validate an engine (checks custom engines first)
+    let lookup_engine = |name: &str| -> Result<Engine> {
+        // Check custom engines first
+        if let Some(engine) = custom_engines
+            .iter()
+            .find(|e| e.name.eq_ignore_ascii_case(name))
+        {
+            return Ok(engine.clone());
+        }
+
+        // Then check database
         db.get(name).cloned().ok_or_else(|| {
             let mut msg = format!("Unknown engine: '{}'", name);
             let suggestions = db.suggest(name);
@@ -358,6 +374,12 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
                 }
             }
             msg.push_str("\n\nRun `tsi engines` to see all available engines.");
+            if !custom_engines.is_empty() {
+                msg.push_str("\n\nCustom engines defined:");
+                for e in &custom_engines {
+                    msg.push_str(&format!("\n  {}", e.name));
+                }
+            }
             anyhow::anyhow!(msg)
         })
     };
@@ -562,5 +584,108 @@ fn print_losses_estimate(solution: &crate::optimizer::Solution) {
         let total_dv = rocket.total_delta_v().as_mps();
 
         terminal::print_losses(&estimate, total_dv);
+    }
+}
+
+/// Parse a custom engine specification string.
+///
+/// Format: name:thrust_kn:isp_s:mass_kg:propellant
+///
+/// Example: "MyEngine:2000:350:1500:loxch4"
+fn parse_custom_engine(spec: &str) -> Result<Engine> {
+    let parts: Vec<&str> = spec.split(':').collect();
+
+    if parts.len() != 5 {
+        bail!(
+            "Invalid custom engine format: '{}'\n\n\
+            Expected format: name:thrust_kn:isp_s:mass_kg:propellant\n\
+            Example: MyEngine:2000:350:1500:loxch4\n\n\
+            Propellant types: loxrp1, loxlh2, loxch4, n2o4udmh, solid",
+            spec
+        );
+    }
+
+    let name = parts[0].to_string();
+    if name.is_empty() {
+        bail!("Custom engine name cannot be empty");
+    }
+
+    let thrust_kn: f64 = parts[1].parse().map_err(|_| {
+        anyhow::anyhow!(
+            "Invalid thrust value '{}' in custom engine '{}'.\n\
+            Thrust should be in kilonewtons (e.g., 2000 for 2000 kN)",
+            parts[1],
+            name
+        )
+    })?;
+    if thrust_kn <= 0.0 {
+        bail!("Thrust must be positive for custom engine '{}'", name);
+    }
+
+    let isp_s: f64 = parts[2].parse().map_err(|_| {
+        anyhow::anyhow!(
+            "Invalid ISP value '{}' in custom engine '{}'.\n\
+            ISP should be in seconds (e.g., 350 for 350s)",
+            parts[2],
+            name
+        )
+    })?;
+    if isp_s <= 0.0 {
+        bail!("ISP must be positive for custom engine '{}'", name);
+    }
+
+    let mass_kg: f64 = parts[3].parse().map_err(|_| {
+        anyhow::anyhow!(
+            "Invalid mass value '{}' in custom engine '{}'.\n\
+            Mass should be in kilograms (e.g., 1500 for 1500 kg)",
+            parts[3],
+            name
+        )
+    })?;
+    if mass_kg <= 0.0 {
+        bail!("Mass must be positive for custom engine '{}'", name);
+    }
+
+    let propellant = parse_propellant(parts[4]).map_err(|_| {
+        anyhow::anyhow!(
+            "Unknown propellant '{}' in custom engine '{}'.\n\n\
+            Valid propellant types:\n\
+              loxrp1   - LOX/RP-1 (kerosene)\n\
+              loxlh2   - LOX/LH2 (hydrogen)\n\
+              loxch4   - LOX/CH4 (methane)\n\
+              n2o4udmh - N2O4/UDMH (hypergolic)\n\
+              solid    - Solid propellant",
+            parts[4],
+            name
+        )
+    })?;
+
+    // Create engine with vacuum values (assume vacuum-optimized for custom engines)
+    // Use 90% of vacuum thrust for sea level (rough approximation)
+    let thrust_vac = Force::kilonewtons(thrust_kn);
+    let thrust_sl = Force::kilonewtons(thrust_kn * 0.9);
+    let isp_vac = Isp::seconds(isp_s);
+    let isp_sl = Isp::seconds(isp_s * 0.85); // Rough sea-level approximation
+
+    Ok(Engine::new(
+        name,
+        thrust_sl,
+        thrust_vac,
+        isp_sl,
+        isp_vac,
+        Mass::kg(mass_kg),
+        propellant,
+    ))
+}
+
+/// Parse propellant type from string.
+fn parse_propellant(s: &str) -> Result<Propellant> {
+    match s.to_lowercase().as_str() {
+        "loxrp1" | "lox-rp1" | "kerosene" => Ok(Propellant::LoxRp1),
+        "loxlh2" | "lox-lh2" | "hydrogen" => Ok(Propellant::LoxLh2),
+        "loxch4" | "lox-ch4" | "methane" => Ok(Propellant::LoxCh4),
+        "n2o4udmh" | "hypergolic" => Ok(Propellant::N2o4Udmh),
+        "solid" => Ok(Propellant::Solid),
+        _ => bail!("Unknown propellant type: {}", s),
     }
 }

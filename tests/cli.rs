@@ -782,3 +782,86 @@ fn optimize_show_losses() {
         .stdout(predicate::str::contains("Steering losses"))
         .stdout(predicate::str::contains("LEO orbital v"));
 }
+
+// ============================================================================
+// Custom engines
+// ============================================================================
+
+#[test]
+fn optimize_custom_engine() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--custom-engine",
+            "TestEngine:2500:360:1800:loxch4",
+            "--engine",
+            "TestEngine",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("TestEngine"))
+        .stdout(predicate::str::contains("LOX/CH4"));
+}
+
+#[test]
+fn optimize_custom_engine_invalid_format() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--custom-engine",
+            "BadFormat",
+            "--engine",
+            "BadFormat",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid custom engine format"));
+}
+
+#[test]
+fn optimize_custom_engine_invalid_propellant() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--custom-engine",
+            "TestEngine:2500:360:1800:invalid",
+            "--engine",
+            "TestEngine",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unknown propellant"));
+}
+
+#[test]
+fn optimize_mix_custom_and_database_engines() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--custom-engine",
+            "CustomBooster:3000:320:2000:loxrp1",
+            "--engine",
+            "CustomBooster,raptor-2",
+            "--optimizer",
+            "brute-force",
+            "--quiet",
+        ])
+        .assert()
+        .success();
+}

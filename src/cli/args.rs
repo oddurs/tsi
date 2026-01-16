@@ -220,6 +220,16 @@ pub struct OptimizeArgs {
     /// Show estimated atmospheric and gravity losses
     #[arg(long)]
     pub show_losses: bool,
+
+    /// Define a custom engine inline (can be used multiple times)
+    ///
+    /// Format: name:thrust_kn:isp_s:mass_kg:propellant
+    ///
+    /// Example: --custom-engine "MyEngine:2000:350:1500:loxch4"
+    ///
+    /// Propellant types: loxrp1, loxlh2, loxch4, n2o4udmh, solid
+    #[arg(long, value_name = "SPEC")]
+    pub custom_engine: Vec<String>,
 }
 
 /// Uncertainty level for Monte Carlo analysis.
