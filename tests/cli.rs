@@ -430,13 +430,7 @@ fn optimize_unknown_engine_fails() {
 #[test]
 fn optimize_missing_payload_fails() {
     tsi()
-        .args([
-            "optimize",
-            "--target-dv",
-            "9400",
-            "--engine",
-            "raptor-2",
-        ])
+        .args(["optimize", "--target-dv", "9400", "--engine", "raptor-2"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("--payload"));
@@ -493,4 +487,246 @@ fn optimize_engine_case_insensitive() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Raptor-2"));
+}
+
+// ============================================================================
+// Optimizer selection
+// ============================================================================
+
+#[test]
+fn optimize_with_analytical_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "analytical",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_with_brute_force_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "brute-force",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_multi_engine_comma_separated() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9000",
+            "--engine",
+            "raptor-2,merlin-1d",
+            "--optimizer",
+            "brute-force",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Staging Optimization Complete"));
+}
+
+#[test]
+fn optimize_json_includes_metadata() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--output",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"metadata\""))
+        .stdout(predicate::str::contains("\"optimizer\""))
+        .stdout(predicate::str::contains("\"iterations\""))
+        .stdout(predicate::str::contains("\"runtime_ms\""));
+}
+
+#[test]
+fn optimize_quiet_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "brute-force",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_per_stage_engines() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--stage2-engine",
+            "raptor-vacuum",
+            "--optimizer",
+            "brute-force",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+// ============================================================================
+// Monte Carlo Analysis
+// ============================================================================
+
+#[test]
+fn optimize_monte_carlo_basic() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "50",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"))
+        .stdout(predicate::str::contains("Success probability"));
+}
+
+#[test]
+fn optimize_monte_carlo_with_uncertainty_level() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "30",
+            "--uncertainty",
+            "high",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"));
+}
+
+#[test]
+fn optimize_monte_carlo_json_output() {
+    let output = tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "20",
+            "--output",
+            "json",
+        ])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json["monte_carlo"].is_object());
+    assert!(json["monte_carlo"]["success_probability"].is_number());
+    assert!(json["monte_carlo"]["delta_v"]["mean"].is_number());
+}
+
+#[test]
+fn optimize_monte_carlo_shows_confidence_intervals() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "100",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Confidence Intervals"))
+        .stdout(predicate::str::contains("5th %ile"))
+        .stdout(predicate::str::contains("95th %ile"));
+}
+
+#[test]
+fn optimize_uncertainty_none() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "10",
+            "--uncertainty",
+            "none",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("100.0%")); // 100% success with no uncertainty
 }

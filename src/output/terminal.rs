@@ -11,8 +11,15 @@
 //! - `│` Single vertical line
 //! - `┌┐└┘` Corners
 //! - `├┤` T-junctions
+//!
+//! # Monte Carlo Output
+//!
+//! Also provides formatting for Monte Carlo results:
+//! - Success probability with confidence indicator
+//! - Percentile values (5th, 50th, 95th)
+//! - ASCII histogram of delta-v distribution
 
-use crate::optimizer::Solution;
+use crate::optimizer::{MonteCarloResults, Solution};
 use crate::units::{format_thousands_f64, Velocity};
 
 /// Width of the output box (interior content width)
@@ -141,7 +148,11 @@ pub fn print_solution_with_options(
             vac_thrust.as_newtons() / (total_mass.as_kg() * gravity)
         };
 
-        let twr_label = if i == 0 && sea_level { "TWR (SL)" } else { "TWR (vac)" };
+        let twr_label = if i == 0 && sea_level {
+            "TWR (SL)"
+        } else {
+            "TWR (vac)"
+        };
 
         print_stage_box_with_twr_label(
             stage_num,
@@ -188,6 +199,20 @@ pub fn print_solution_with_options(
     if (gravity - 9.80665).abs() > 0.01 {
         println!();
         println!("  Note: TWR calculated for g = {:.2} m/s²", gravity);
+    }
+
+    // Optimizer metadata
+    if !solution.optimizer_name.is_empty() {
+        println!();
+        let runtime = if solution.runtime.as_millis() > 0 {
+            format!(" in {}ms", solution.runtime.as_millis())
+        } else {
+            String::new()
+        };
+        println!(
+            "  Optimizer: {} ({} configs{})",
+            solution.optimizer_name, solution.iterations, runtime
+        );
     }
 
     println!();
@@ -247,6 +272,172 @@ fn print_stage_box_with_twr_label(
     println!("  └{}┘", "─".repeat(BOX_WIDTH));
 }
 
+// ============================================================================
+// Monte Carlo Output
+// ============================================================================
+
+/// Print Monte Carlo results summary.
+///
+/// Shows success probability, confidence intervals, and histogram.
+pub fn print_monte_carlo_results(results: &MonteCarloResults) {
+    println!();
+    println!("  ┌{}┐", "─".repeat(BOX_WIDTH));
+    println!(
+        "  │  {:<width$}│",
+        "MONTE CARLO ANALYSIS",
+        width = BOX_WIDTH - 2
+    );
+    println!("  └{}┘", "─".repeat(BOX_WIDTH));
+    println!();
+
+    // Success probability with status indicator
+    let success_pct = results.success_probability() * 100.0;
+    let status = if success_pct >= 95.0 {
+        "HIGH CONFIDENCE"
+    } else if success_pct >= 80.0 {
+        "ADEQUATE"
+    } else if success_pct >= 50.0 {
+        "MARGINAL"
+    } else {
+        "LOW CONFIDENCE"
+    };
+
+    println!("  Success probability:  {:.1}% ({}) ", success_pct, status);
+    println!(
+        "  Iterations:           {} ({} failed)",
+        results.total_runs, results.failures
+    );
+    println!("  Runtime:              {}ms", results.runtime.as_millis());
+    println!();
+
+    // Delta-v statistics
+    println!("  Delta-v Statistics:");
+    println!(
+        "    Mean:         {} m/s",
+        format_thousands_f64(results.mean_delta_v())
+    );
+    println!(
+        "    Std Dev:      {} m/s",
+        format_thousands_f64(results.std_delta_v())
+    );
+    println!();
+
+    // Percentiles
+    println!("  Confidence Intervals:");
+    println!(
+        "    5th %ile:     {} m/s  (worst case)",
+        format_thousands_f64(results.delta_v_percentile(5.0))
+    );
+    println!(
+        "    50th %ile:    {} m/s  (median)",
+        format_thousands_f64(results.delta_v_percentile(50.0))
+    );
+    println!(
+        "    95th %ile:    {} m/s  (best case)",
+        format_thousands_f64(results.delta_v_percentile(95.0))
+    );
+    println!();
+
+    // Required margin for 95% confidence
+    let margin_95 = results.required_margin(0.95);
+    if margin_95 > 0.0 {
+        println!(
+            "  For 95% confidence, add {} m/s margin",
+            format_thousands_f64(margin_95)
+        );
+    }
+
+    // Warning for low success probability
+    if success_pct < 95.0 {
+        println!();
+        println!("  ⚠ WARNING: Success probability is below 95%");
+        println!("    Consider increasing target delta-v margin");
+    }
+
+    // Print histogram
+    if !results.delta_v_samples.is_empty() {
+        println!();
+        print_histogram(&results.delta_v_samples, results.target_delta_v.as_mps());
+    }
+}
+
+/// Print an ASCII histogram of delta-v distribution.
+fn print_histogram(samples: &[f64], target: f64) {
+    const HISTOGRAM_WIDTH: usize = 40;
+    const NUM_BINS: usize = 20;
+
+    if samples.is_empty() {
+        return;
+    }
+
+    // Find range
+    let min = samples.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let range = max - min;
+
+    if range < 1.0 {
+        // No meaningful distribution to show
+        return;
+    }
+
+    // Create bins
+    let bin_width = range / NUM_BINS as f64;
+    let mut bins = [0usize; NUM_BINS];
+
+    for &sample in samples {
+        let bin = ((sample - min) / bin_width).floor() as usize;
+        let bin = bin.min(NUM_BINS - 1);
+        bins[bin] += 1;
+    }
+
+    // Find max bin for scaling
+    let max_bin = *bins.iter().max().unwrap_or(&1);
+
+    println!("  Delta-v Distribution:");
+    println!("  ┌{}┐", "─".repeat(HISTOGRAM_WIDTH + 14));
+
+    for (i, &count) in bins.iter().enumerate() {
+        let bin_start = min + i as f64 * bin_width;
+        let bar_len = if max_bin > 0 {
+            (count * HISTOGRAM_WIDTH) / max_bin
+        } else {
+            0
+        };
+
+        // Mark the bin containing the target
+        let marker = if bin_start <= target && target < bin_start + bin_width {
+            "◄"
+        } else {
+            " "
+        };
+
+        println!(
+            "  │ {:>5.0} │{}{}│",
+            bin_start,
+            "█".repeat(bar_len),
+            " ".repeat(HISTOGRAM_WIDTH - bar_len + 1),
+        );
+
+        // Add target line marker below the relevant bin
+        if marker == "◄" && i < NUM_BINS - 1 {
+            println!(
+                "  │       │{:─<width$}┼ target",
+                "",
+                width = HISTOGRAM_WIDTH + 1
+            );
+        }
+    }
+
+    println!("  └{}┘", "─".repeat(HISTOGRAM_WIDTH + 14));
+    println!(
+        "        {} m/s {:>width$} {} m/s",
+        format_thousands_f64(min),
+        "",
+        format_thousands_f64(max),
+        width = HISTOGRAM_WIDTH - 10
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +447,17 @@ mod tests {
         // Box should be wide enough for typical content
         assert!(BOX_WIDTH >= 50);
         assert!(BOX_WIDTH <= 80);
+    }
+
+    #[test]
+    fn histogram_handles_empty() {
+        // Should not panic on empty samples
+        print_histogram(&[], 9400.0);
+    }
+
+    #[test]
+    fn histogram_handles_single_value() {
+        // Should not panic on single value
+        print_histogram(&[9400.0], 9400.0);
     }
 }

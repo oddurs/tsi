@@ -357,12 +357,7 @@ fn optimizer_respects_twr_constraints() {
     let raptor = db.get("raptor-2").unwrap();
 
     let min_twr = 1.3;
-    let constraints = Constraints::new(
-        Ratio::new(min_twr),
-        Ratio::new(0.7),
-        2,
-        Ratio::new(0.08),
-    );
+    let constraints = Constraints::new(Ratio::new(min_twr), Ratio::new(0.7), 2, Ratio::new(0.08));
 
     let problem = Problem::new(
         Mass::kg(10_000.0),

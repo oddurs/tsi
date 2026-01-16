@@ -13,6 +13,7 @@
 //! # Available Optimizers
 //!
 //! - [`AnalyticalOptimizer`]: Closed-form solution for 2-stage, single-engine
+//! - [`BruteForceOptimizer`]: Grid search for multi-engine or N-stage problems
 //!
 //! # Example
 //!
@@ -39,12 +40,20 @@
 //! ```
 
 mod analytical;
+mod brute_force;
+mod monte_carlo;
 mod problem;
 mod solution;
+mod uncertainty;
 
 pub use analytical::AnalyticalOptimizer;
+pub use brute_force::BruteForceOptimizer;
+pub use monte_carlo::{
+    DistributionSummary, MonteCarloJsonSummary, MonteCarloResults, MonteCarloRunner,
+};
 pub use problem::{ConstraintError, Constraints, Problem, ProblemError};
 pub use solution::Solution;
+pub use uncertainty::{ParameterSampler, Uncertainty};
 
 /// Trait for optimization algorithms.
 ///

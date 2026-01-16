@@ -1,14 +1,17 @@
 use anyhow::{bail, Result};
 
 use crate::engine::EngineDatabase;
-use crate::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+use crate::optimizer::{
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, MonteCarloRunner, Optimizer, Problem,
+    Uncertainty,
+};
 use crate::output::terminal;
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
 use super::args::{
     CalculateArgs, CalculateOutputFormat, EnginesArgs, OptimizeArgs, OptimizeOutputFormat,
-    OutputFormat,
+    OptimizerChoice, OutputFormat, UncertaintyLevel,
 };
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
@@ -337,20 +340,44 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         bail!("{}", msg.trim_end());
     }
 
-    // Load engine database and look up engine
+    // Load engine database and look up engines (comma-separated)
     let db = EngineDatabase::default();
-    let engine = db.get(&args.engine).ok_or_else(|| {
-        let mut msg = format!("Unknown engine: '{}'", args.engine);
-        let suggestions = db.suggest(&args.engine);
-        if !suggestions.is_empty() {
-            msg.push_str("\n\nDid you mean:");
-            for s in suggestions {
-                msg.push_str(&format!("\n  {}", s));
+    let engine_names: Vec<&str> = args.engine.split(',').map(|s| s.trim()).collect();
+    let mut engines = Vec::new();
+
+    // Helper to look up and validate an engine
+    let lookup_engine = |name: &str| -> Result<crate::engine::Engine> {
+        db.get(name).cloned().ok_or_else(|| {
+            let mut msg = format!("Unknown engine: '{}'", name);
+            let suggestions = db.suggest(name);
+            if !suggestions.is_empty() {
+                msg.push_str("\n\nDid you mean:");
+                for s in suggestions {
+                    msg.push_str(&format!("\n  {}", s));
+                }
             }
+            msg.push_str("\n\nRun `tsi engines` to see all available engines.");
+            anyhow::anyhow!(msg)
+        })
+    };
+
+    for engine_name in &engine_names {
+        engines.push(lookup_engine(engine_name)?);
+    }
+
+    // Add per-stage engines if specified
+    if let Some(ref s1_engine) = args.stage1_engine {
+        let engine = lookup_engine(s1_engine)?;
+        if !engines.iter().any(|e| e.name == engine.name) {
+            engines.push(engine);
         }
-        msg.push_str("\n\nRun `tsi engines` to see all available engines.");
-        anyhow::anyhow!(msg)
-    })?;
+    }
+    if let Some(ref s2_engine) = args.stage2_engine {
+        let engine = lookup_engine(s2_engine)?;
+        if !engines.iter().any(|e| e.name == engine.name) {
+            engines.push(engine);
+        }
+    }
 
     // Build constraints
     let constraints = Constraints::new(
@@ -364,26 +391,93 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let problem = Problem::new(
         Mass::kg(args.payload),
         Velocity::mps(args.target_dv),
-        vec![engine.clone()],
+        engines.clone(),
         constraints,
     )
-    .with_stage_count(2); // Currently only supporting 2 stages
+    .with_stage_count(args.max_stages);
 
-    // Run optimizer
-    let optimizer = AnalyticalOptimizer;
-    let solution = optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?;
+    // Select optimizer
+    let show_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
+    let solution = match select_optimizer(&args, &problem) {
+        SelectedOptimizer::Analytical => {
+            let optimizer = AnalyticalOptimizer;
+            optimizer
+                .optimize(&problem)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+        SelectedOptimizer::BruteForce => {
+            let optimizer = BruteForceOptimizer::default().with_progress(show_progress);
+            optimizer
+                .optimize(&problem)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+    };
+
+    // Run Monte Carlo analysis if requested
+    let mc_results = if let Some(iterations) = args.monte_carlo {
+        let uncertainty = uncertainty_from_level(args.uncertainty);
+        let show_mc_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
+
+        let runner = MonteCarloRunner::new(uncertainty).with_progress(show_mc_progress);
+        Some(
+            runner
+                .run(&problem, iterations)
+                .map_err(|e| anyhow::anyhow!("{}", e))?,
+        )
+    } else {
+        None
+    };
 
     // Output results
     match args.output {
         OptimizeOutputFormat::Pretty => {
             print_solution_pretty(&args, &solution);
+            if let Some(ref mc) = mc_results {
+                terminal::print_monte_carlo_results(mc);
+            }
         }
         OptimizeOutputFormat::Json => {
-            print_solution_json(&args, &solution)?;
+            print_solution_json(&args, &solution, mc_results.as_ref())?;
         }
     }
 
     Ok(())
+}
+
+/// Convert CLI uncertainty level to Uncertainty struct.
+fn uncertainty_from_level(level: UncertaintyLevel) -> Uncertainty {
+    match level {
+        UncertaintyLevel::None => Uncertainty::none(),
+        UncertaintyLevel::Low => Uncertainty::new(0.5, 3.0, 1.0),
+        UncertaintyLevel::Default => Uncertainty::default(),
+        UncertaintyLevel::High => Uncertainty::new(2.0, 8.0, 3.0),
+    }
+}
+
+/// Which optimizer to use.
+enum SelectedOptimizer {
+    Analytical,
+    BruteForce,
+}
+
+/// Select the appropriate optimizer based on user choice and problem complexity.
+fn select_optimizer(args: &OptimizeArgs, problem: &Problem) -> SelectedOptimizer {
+    match args.optimizer {
+        OptimizerChoice::Analytical => SelectedOptimizer::Analytical,
+        OptimizerChoice::BruteForce => SelectedOptimizer::BruteForce,
+        OptimizerChoice::Auto => {
+            // Auto-select based on problem complexity:
+            // - Single engine + 2 stages → Analytical (fast)
+            // - Multiple engines or != 2 stages → BruteForce
+            let is_simple = problem.is_single_engine() && problem.stage_count == Some(2);
+
+            if is_simple {
+                SelectedOptimizer::Analytical
+            } else {
+                SelectedOptimizer::BruteForce
+            }
+        }
+    }
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
@@ -399,6 +493,7 @@ fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solut
 fn print_solution_json(
     args: &OptimizeArgs,
     solution: &crate::optimizer::Solution,
+    mc_results: Option<&crate::optimizer::MonteCarloResults>,
 ) -> Result<()> {
     let rocket = &solution.rocket;
     let stages = rocket.stages();
@@ -421,7 +516,7 @@ fn print_solution_json(
         })
         .collect();
 
-    let output = serde_json::json!({
+    let mut output = serde_json::json!({
         "target_delta_v_mps": args.target_dv,
         "payload_kg": args.payload,
         "total_mass_kg": rocket.total_mass().as_kg(),
@@ -430,7 +525,17 @@ fn print_solution_json(
         "margin_mps": solution.margin.as_mps(),
         "margin_percent": solution.margin_percent(Velocity::mps(args.target_dv)),
         "stages": stages_json,
+        "metadata": {
+            "optimizer": solution.optimizer_name,
+            "iterations": solution.iterations,
+            "runtime_ms": solution.runtime.as_millis(),
+        },
     });
+
+    // Add Monte Carlo results if available
+    if let Some(mc) = mc_results {
+        output["monte_carlo"] = serde_json::to_value(mc.to_json_summary())?;
+    }
 
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())

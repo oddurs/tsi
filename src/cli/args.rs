@@ -157,9 +157,17 @@ pub struct OptimizeArgs {
     #[arg(short = 'd', long)]
     pub target_dv: f64,
 
-    /// Engine name from database
+    /// Engine name from database (comma-separated for multiple)
     #[arg(short, long)]
     pub engine: String,
+
+    /// Force specific engine for first stage (overrides --engine for stage 1)
+    #[arg(long)]
+    pub stage1_engine: Option<String>,
+
+    /// Force specific engine for second stage (overrides --engine for stage 2)
+    #[arg(long)]
+    pub stage2_engine: Option<String>,
 
     /// Minimum thrust-to-weight ratio at liftoff
     #[arg(long, default_value = "1.2")]
@@ -185,9 +193,51 @@ pub struct OptimizeArgs {
     #[arg(long, value_enum, default_value = "earth")]
     pub gravity: Gravity,
 
+    /// Optimizer algorithm (auto-selects if not specified)
+    #[arg(long, value_enum, default_value = "auto")]
+    pub optimizer: OptimizerChoice,
+
+    /// Hide progress indicator (useful for scripts)
+    #[arg(long)]
+    pub quiet: bool,
+
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: OptimizeOutputFormat,
+
+    /// Run Monte Carlo uncertainty analysis with N iterations
+    #[arg(long, value_name = "N")]
+    pub monte_carlo: Option<u64>,
+
+    /// Uncertainty level for Monte Carlo (low, default, high, or custom ISP%)
+    #[arg(long, value_enum, default_value = "default")]
+    pub uncertainty: UncertaintyLevel,
+}
+
+/// Uncertainty level for Monte Carlo analysis.
+#[derive(Clone, Copy, ValueEnum, Default)]
+pub enum UncertaintyLevel {
+    /// No uncertainty (0%)
+    None,
+    /// Low uncertainty (ISP ±0.5%, thrust ±1%, structural ±3%)
+    Low,
+    /// Default uncertainty (ISP ±1%, thrust ±2%, structural ±5%)
+    #[default]
+    Default,
+    /// High uncertainty (ISP ±2%, thrust ±3%, structural ±8%)
+    High,
+}
+
+/// Optimizer algorithm to use.
+#[derive(Clone, Copy, ValueEnum, Default)]
+pub enum OptimizerChoice {
+    /// Auto-select based on problem complexity (default)
+    #[default]
+    Auto,
+    /// Analytical optimizer (fast, 2-stage single-engine only)
+    Analytical,
+    /// Brute force grid search (slower, handles any configuration)
+    BruteForce,
 }
 
 /// Surface gravity for different planetary bodies.
@@ -212,7 +262,7 @@ impl Gravity {
     }
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OptimizeOutputFormat {
     /// Detailed pretty-printed output
     Pretty,
