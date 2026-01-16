@@ -13,6 +13,7 @@
 //! # Available Optimizers
 //!
 //! - [`AnalyticalOptimizer`]: Closed-form solution for 2-stage, single-engine
+//! - [`BruteForceOptimizer`]: Grid search for multi-engine or N-stage problems
 //!
 //! # Example
 //!
@@ -39,10 +40,12 @@
 //! ```
 
 mod analytical;
+mod brute_force;
 mod problem;
 mod solution;
 
 pub use analytical::AnalyticalOptimizer;
+pub use brute_force::BruteForceOptimizer;
 pub use problem::{ConstraintError, Constraints, Problem, ProblemError};
 pub use solution::Solution;
 
