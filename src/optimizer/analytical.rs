@@ -137,8 +137,14 @@ impl AnalyticalOptimizer {
         if denominator <= 0.0 {
             return Err(OptimizeError::Infeasible {
                 reason: format!(
-                    "Structural ratio {} too high for required mass ratio {:.2}",
-                    eps, r
+                    "Structural ratio {:.0}% too high for required mass ratio {:.2}.\n\n\
+                    Suggestions:\n  \
+                    - Lower --structural-ratio (currently {:.0}%)\n  \
+                    - Use an engine with higher ISP to reduce mass ratio\n  \
+                    - Reduce target delta-v",
+                    eps * 100.0,
+                    r,
+                    eps * 100.0
                 ),
             });
         }
@@ -192,8 +198,13 @@ impl AnalyticalOptimizer {
 
         Err(OptimizeError::Infeasible {
             reason: format!(
-                "Cannot achieve TWR {} with up to {} engines",
-                min_twr, max_engines
+                "Cannot achieve TWR {:.2} with up to {} engines.\n\n\
+                Suggestions:\n  \
+                - Lower --min-twr to allow lower thrust-to-weight\n  \
+                - Use an engine with higher thrust\n  \
+                - Try brute-force search: --optimizer brute-force",
+                min_twr.as_f64(),
+                max_engines
             ),
         })
     }

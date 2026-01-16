@@ -573,8 +573,14 @@ impl Optimizer for BruteForceOptimizer {
             }
             None => Err(OptimizeError::Infeasible {
                 reason: format!(
-                    "No feasible configuration found after {} iterations",
-                    total_iterations
+                    "No feasible configuration found after {} iterations.\n\n\
+                    Suggestions:\n  \
+                    - Increase --max-stages (currently searching {}-stage)\n  \
+                    - Lower --min-twr to allow lower thrust-to-weight\n  \
+                    - Try different engines with higher ISP or thrust\n  \
+                    - Reduce target delta-v or payload mass",
+                    total_iterations,
+                    problem.stage_count.unwrap_or(2)
                 ),
             }),
         }
