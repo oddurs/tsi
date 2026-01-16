@@ -571,3 +571,45 @@ fn optimize_json_includes_metadata() {
         .stdout(predicate::str::contains("\"iterations\""))
         .stdout(predicate::str::contains("\"runtime_ms\""));
 }
+
+#[test]
+fn optimize_quiet_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "brute-force",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_per_stage_engines() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--stage2-engine",
+            "raptor-vacuum",
+            "--optimizer",
+            "brute-force",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}

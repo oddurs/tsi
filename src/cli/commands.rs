@@ -342,10 +342,11 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let engine_names: Vec<&str> = args.engine.split(',').map(|s| s.trim()).collect();
     let mut engines = Vec::new();
 
-    for engine_name in &engine_names {
-        let engine = db.get(engine_name).ok_or_else(|| {
-            let mut msg = format!("Unknown engine: '{}'", engine_name);
-            let suggestions = db.suggest(engine_name);
+    // Helper to look up and validate an engine
+    let lookup_engine = |name: &str| -> Result<crate::engine::Engine> {
+        db.get(name).cloned().ok_or_else(|| {
+            let mut msg = format!("Unknown engine: '{}'", name);
+            let suggestions = db.suggest(name);
             if !suggestions.is_empty() {
                 msg.push_str("\n\nDid you mean:");
                 for s in suggestions {
@@ -354,8 +355,25 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
             }
             msg.push_str("\n\nRun `tsi engines` to see all available engines.");
             anyhow::anyhow!(msg)
-        })?;
-        engines.push(engine.clone());
+        })
+    };
+
+    for engine_name in &engine_names {
+        engines.push(lookup_engine(engine_name)?);
+    }
+
+    // Add per-stage engines if specified
+    if let Some(ref s1_engine) = args.stage1_engine {
+        let engine = lookup_engine(s1_engine)?;
+        if !engines.iter().any(|e| e.name == engine.name) {
+            engines.push(engine);
+        }
+    }
+    if let Some(ref s2_engine) = args.stage2_engine {
+        let engine = lookup_engine(s2_engine)?;
+        if !engines.iter().any(|e| e.name == engine.name) {
+            engines.push(engine);
+        }
     }
 
     // Build constraints
@@ -376,6 +394,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     .with_stage_count(args.max_stages);
 
     // Select optimizer
+    let show_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
     let solution = match select_optimizer(&args, &problem) {
         SelectedOptimizer::Analytical => {
             let optimizer = AnalyticalOptimizer;
@@ -384,7 +403,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("{}", e))?
         }
         SelectedOptimizer::BruteForce => {
-            let optimizer = BruteForceOptimizer::default();
+            let optimizer = BruteForceOptimizer::default().with_progress(show_progress);
             optimizer
                 .optimize(&problem)
                 .map_err(|e| anyhow::anyhow!("{}", e))?
