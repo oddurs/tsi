@@ -49,6 +49,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
+use serde::Serialize;
 
 use super::{
     AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer, Problem,
@@ -188,6 +189,93 @@ impl MonteCarloResults {
         // Margin is how much below target the worst cases are
         (target - dv_at_percentile).max(0.0)
     }
+
+    /// Convert to JSON-serializable summary.
+    pub fn to_json_summary(&self) -> MonteCarloJsonSummary {
+        MonteCarloJsonSummary {
+            success_probability: self.success_probability(),
+            total_runs: self.total_runs,
+            successes: self.successes,
+            failures: self.failures,
+            target_delta_v_mps: self.target_delta_v.as_mps(),
+            runtime_ms: self.runtime.as_millis() as u64,
+            delta_v: DistributionSummary {
+                mean: self.mean_delta_v(),
+                std_dev: self.std_delta_v(),
+                percentile_5: self.delta_v_percentile(5.0),
+                percentile_50: self.delta_v_percentile(50.0),
+                percentile_95: self.delta_v_percentile(95.0),
+                min: self.delta_v_samples.iter().cloned().fold(f64::INFINITY, f64::min),
+                max: self.delta_v_samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            },
+            mass: DistributionSummary {
+                mean: self.mean_mass(),
+                std_dev: 0.0, // Could add std_mass() if needed
+                percentile_5: self.mass_percentile(5.0),
+                percentile_50: self.mass_percentile(50.0),
+                percentile_95: self.mass_percentile(95.0),
+                min: self.mass_samples.iter().cloned().fold(f64::INFINITY, f64::min),
+                max: self.mass_samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            },
+            required_margin_95_mps: self.required_margin(0.95),
+        }
+    }
+}
+
+/// JSON-serializable Monte Carlo summary.
+#[derive(Debug, Clone, Serialize)]
+pub struct MonteCarloJsonSummary {
+    /// Probability of achieving target delta-v (0.0 to 1.0)
+    pub success_probability: f64,
+
+    /// Total number of Monte Carlo iterations
+    pub total_runs: u64,
+
+    /// Number of successful runs
+    pub successes: u64,
+
+    /// Number of failed optimization attempts
+    pub failures: u64,
+
+    /// Target delta-v in m/s
+    pub target_delta_v_mps: f64,
+
+    /// Simulation runtime in milliseconds
+    pub runtime_ms: u64,
+
+    /// Delta-v distribution statistics
+    pub delta_v: DistributionSummary,
+
+    /// Total mass distribution statistics
+    pub mass: DistributionSummary,
+
+    /// Additional margin needed for 95% confidence (m/s)
+    pub required_margin_95_mps: f64,
+}
+
+/// Summary statistics for a distribution.
+#[derive(Debug, Clone, Serialize)]
+pub struct DistributionSummary {
+    /// Mean value
+    pub mean: f64,
+
+    /// Standard deviation
+    pub std_dev: f64,
+
+    /// 5th percentile (worst case)
+    pub percentile_5: f64,
+
+    /// 50th percentile (median)
+    pub percentile_50: f64,
+
+    /// 95th percentile (best case)
+    pub percentile_95: f64,
+
+    /// Minimum value
+    pub min: f64,
+
+    /// Maximum value
+    pub max: f64,
 }
 
 /// Calculate percentile of a sample set.

@@ -48,7 +48,7 @@ mod uncertainty;
 
 pub use analytical::AnalyticalOptimizer;
 pub use brute_force::BruteForceOptimizer;
-pub use monte_carlo::{MonteCarloResults, MonteCarloRunner};
+pub use monte_carlo::{DistributionSummary, MonteCarloJsonSummary, MonteCarloResults, MonteCarloRunner};
 pub use problem::{ConstraintError, Constraints, Problem, ProblemError};
 pub use solution::Solution;
 pub use uncertainty::{ParameterSampler, Uncertainty};
