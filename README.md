@@ -7,6 +7,7 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 ## Features
 
 - **Multi-engine optimization** - Find optimal staging with mixed engine types
+- **Monte Carlo uncertainty analysis** - Assess design robustness with statistical simulation
 - **Automatic optimizer selection** - Fast analytical or exhaustive brute-force search
 - **Stage performance calculations** - Delta-v, burn time, TWR
 - **Built-in engine database** - 11 real rocket engines with accurate specs
@@ -169,6 +170,33 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2,merlin-1d
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --optimizer brute-force
 ```
 
+### Monte Carlo uncertainty analysis
+
+```bash
+# Run 1000 iterations with default uncertainty (ISP ±1%, thrust ±2%, structural ±5%)
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --monte-carlo 1000
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  MONTE CARLO ANALYSIS                                       │
+  └─────────────────────────────────────────────────────────────┘
+
+  Success probability:  98.2% (HIGH CONFIDENCE)
+  Iterations:           1000 (0 failed)
+
+  Confidence Intervals:
+    5th %ile:     9,312 m/s  (worst case)
+    50th %ile:    9,588 m/s  (median)
+    95th %ile:    9,864 m/s  (best case)
+
+# Use higher uncertainty for development engines
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
+    --monte-carlo 1000 --uncertainty high
+
+# JSON output includes monte_carlo statistics
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
+    --monte-carlo 100 --output json | jq '.monte_carlo.success_probability'
+```
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
@@ -183,7 +211,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --optimizer bru
 - [x] v0.2 - Engine database and enhanced calculations
 - [x] v0.3 - Two-stage optimization (`tsi optimize`)
 - [x] v0.4 - Multi-engine optimization with brute-force search
-- [ ] v0.5 - Monte Carlo uncertainty analysis
+- [x] v0.5 - Monte Carlo uncertainty analysis
 - [ ] v0.6 - Polish (ASCII diagrams, shell completions)
 
 See [docs/plan/roadmap.md](docs/plan/roadmap.md) for detailed plans.

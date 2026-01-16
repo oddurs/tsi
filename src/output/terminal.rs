@@ -282,7 +282,11 @@ fn print_stage_box_with_twr_label(
 pub fn print_monte_carlo_results(results: &MonteCarloResults) {
     println!();
     println!("  ┌{}┐", "─".repeat(BOX_WIDTH));
-    println!("  │  {:<width$}│", "MONTE CARLO ANALYSIS", width = BOX_WIDTH - 2);
+    println!(
+        "  │  {:<width$}│",
+        "MONTE CARLO ANALYSIS",
+        width = BOX_WIDTH - 2
+    );
     println!("  └{}┘", "─".repeat(BOX_WIDTH));
     println!();
 
@@ -298,18 +302,12 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
         "LOW CONFIDENCE"
     };
 
-    println!(
-        "  Success probability:  {:.1}% ({}) ",
-        success_pct, status
-    );
+    println!("  Success probability:  {:.1}% ({}) ", success_pct, status);
     println!(
         "  Iterations:           {} ({} failed)",
         results.total_runs, results.failures
     );
-    println!(
-        "  Runtime:              {}ms",
-        results.runtime.as_millis()
-    );
+    println!("  Runtime:              {}ms", results.runtime.as_millis());
     println!();
 
     // Delta-v statistics

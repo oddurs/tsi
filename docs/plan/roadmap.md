@@ -8,6 +8,7 @@
 | v0.2.0 | 2026-01-14 | Engine database (11 engines), `engines` command, propellant types |
 | v0.3.0 | 2026-01-15 | Two-stage analytical optimizer, `optimize` command, JSON output |
 | v0.4.0 | 2026-01-15 | Multi-engine brute-force optimizer, parallel search (rayon), per-stage engines |
+| v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, --monte-carlo flag, confidence intervals |
 
 ---
 
@@ -189,35 +190,36 @@
 
 ---
 
-## Phase 5: Uncertainty Analysis (v0.5.0)
+## Phase 5: Uncertainty Analysis ✅ COMPLETE (v0.5.0)
 **Goal:** Monte Carlo simulation for robust solutions
 
-*Libraries: `rand` for distributions, `rayon` (already added) for parallel execution*
+*Libraries: `rand` + `rand_distr` for distributions, `rayon` for parallel execution*
 
 ### 5.1 Random Sampling
-- [ ] Add parameter uncertainty to Problem definition
-- [ ] Isp uncertainty (±X%)
-- [ ] Structural mass uncertainty (±X%)
-- [ ] Thrust uncertainty (±X%)
-- [ ] Sample from normal distributions (`rand_distr`)
+- [x] Add parameter uncertainty to Problem definition
+- [x] Isp uncertainty (±X%)
+- [x] Structural mass uncertainty (±X%)
+- [x] Thrust uncertainty (±X%)
+- [x] Sample from normal distributions (`rand_distr`)
 
 ### 5.2 Monte Carlo Runner
-- [ ] Implement parallel execution with rayon (already in deps)
-- [ ] Run N iterations with perturbed parameters
-- [ ] Collect delta-v and mass distributions
-- [ ] Compute percentiles (5th, 50th, 95th)
+- [x] Implement parallel execution with rayon
+- [x] Run N iterations with perturbed parameters
+- [x] Collect delta-v and mass distributions
+- [x] Compute percentiles (5th, 50th, 95th)
 
 ### 5.3 Results Reporting
-- [ ] Calculate success probability (delta-v ≥ target)
-- [ ] Report confidence intervals
-- [ ] Show histogram in terminal (ASCII)
-- [ ] Include in JSON output
+- [x] Calculate success probability (delta-v ≥ target)
+- [x] Report confidence intervals
+- [x] Show histogram in terminal (ASCII)
+- [x] Include in JSON output
+- [x] Warning for low success probability (<95%)
 
 ### 5.4 CLI Integration
-- [ ] Add `--monte-carlo N` flag to optimize command
-- [ ] Add `--uncertainty` flag for parameter spread
-- [ ] Show Monte Carlo summary after nominal solution
-- [ ] Warn if success probability < 95%
+- [x] Add `--monte-carlo N` flag to optimize command
+- [x] Add `--uncertainty` flag for parameter spread (none/low/default/high)
+- [x] Show Monte Carlo summary after nominal solution
+- [x] Warn if success probability < 95%
 
 **Deliverable:** `tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --monte-carlo 10000` reports success probability and confidence intervals.
 

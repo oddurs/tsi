@@ -293,8 +293,8 @@ mod tests {
         );
 
         // Standard deviation should be close to 1% of nominal
-        let variance: f64 = samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-            / (samples.len() - 1) as f64;
+        let variance: f64 =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
         let std_dev = variance.sqrt();
         let expected_std = 350.0 * 0.01; // 1% of nominal
         assert!(
