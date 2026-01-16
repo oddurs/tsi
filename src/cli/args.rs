@@ -157,7 +157,7 @@ pub struct OptimizeArgs {
     #[arg(short = 'd', long)]
     pub target_dv: f64,
 
-    /// Engine name from database
+    /// Engine name from database (comma-separated for multiple)
     #[arg(short, long)]
     pub engine: String,
 
@@ -185,9 +185,25 @@ pub struct OptimizeArgs {
     #[arg(long, value_enum, default_value = "earth")]
     pub gravity: Gravity,
 
+    /// Optimizer algorithm (auto-selects if not specified)
+    #[arg(long, value_enum, default_value = "auto")]
+    pub optimizer: OptimizerChoice,
+
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: OptimizeOutputFormat,
+}
+
+/// Optimizer algorithm to use.
+#[derive(Clone, Copy, ValueEnum, Default)]
+pub enum OptimizerChoice {
+    /// Auto-select based on problem complexity (default)
+    #[default]
+    Auto,
+    /// Analytical optimizer (fast, 2-stage single-engine only)
+    Analytical,
+    /// Brute force grid search (slower, handles any configuration)
+    BruteForce,
 }
 
 /// Surface gravity for different planetary bodies.
