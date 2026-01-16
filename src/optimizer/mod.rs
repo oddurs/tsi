@@ -43,11 +43,13 @@ mod analytical;
 mod brute_force;
 mod problem;
 mod solution;
+mod uncertainty;
 
 pub use analytical::AnalyticalOptimizer;
 pub use brute_force::BruteForceOptimizer;
 pub use problem::{ConstraintError, Constraints, Problem, ProblemError};
 pub use solution::Solution;
+pub use uncertainty::{ParameterSampler, Uncertainty};
 
 /// Trait for optimization algorithms.
 ///
