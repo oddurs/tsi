@@ -430,13 +430,7 @@ fn optimize_unknown_engine_fails() {
 #[test]
 fn optimize_missing_payload_fails() {
     tsi()
-        .args([
-            "optimize",
-            "--target-dv",
-            "9400",
-            "--engine",
-            "raptor-2",
-        ])
+        .args(["optimize", "--target-dv", "9400", "--engine", "raptor-2"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("--payload"));

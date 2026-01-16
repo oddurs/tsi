@@ -379,11 +379,15 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let solution = match select_optimizer(&args, &problem) {
         SelectedOptimizer::Analytical => {
             let optimizer = AnalyticalOptimizer;
-            optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?
+            optimizer
+                .optimize(&problem)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
         }
         SelectedOptimizer::BruteForce => {
             let optimizer = BruteForceOptimizer::default();
-            optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?
+            optimizer
+                .optimize(&problem)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
         }
     };
 
@@ -415,8 +419,7 @@ fn select_optimizer(args: &OptimizeArgs, problem: &Problem) -> SelectedOptimizer
             // Auto-select based on problem complexity:
             // - Single engine + 2 stages → Analytical (fast)
             // - Multiple engines or != 2 stages → BruteForce
-            let is_simple = problem.is_single_engine()
-                && problem.stage_count == Some(2);
+            let is_simple = problem.is_single_engine() && problem.stage_count == Some(2);
 
             if is_simple {
                 SelectedOptimizer::Analytical
@@ -437,10 +440,7 @@ fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solut
     );
 }
 
-fn print_solution_json(
-    args: &OptimizeArgs,
-    solution: &crate::optimizer::Solution,
-) -> Result<()> {
+fn print_solution_json(args: &OptimizeArgs, solution: &crate::optimizer::Solution) -> Result<()> {
     let rocket = &solution.rocket;
     let stages = rocket.stages();
 

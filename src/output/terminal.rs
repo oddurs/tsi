@@ -141,7 +141,11 @@ pub fn print_solution_with_options(
             vac_thrust.as_newtons() / (total_mass.as_kg() * gravity)
         };
 
-        let twr_label = if i == 0 && sea_level { "TWR (SL)" } else { "TWR (vac)" };
+        let twr_label = if i == 0 && sea_level {
+            "TWR (SL)"
+        } else {
+            "TWR (vac)"
+        };
 
         print_stage_box_with_twr_label(
             stage_num,
