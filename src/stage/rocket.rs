@@ -294,9 +294,8 @@ mod tests {
         let total = rocket.total_mass();
 
         // Should be sum of all stage wet masses + payload
-        let expected = rocket.stages[0].wet_mass().as_kg()
-            + rocket.stages[1].wet_mass().as_kg()
-            + 50_000.0;
+        let expected =
+            rocket.stages[0].wet_mass().as_kg() + rocket.stages[1].wet_mass().as_kg() + 50_000.0;
 
         assert!((total.as_kg() - expected).abs() < 1.0);
     }

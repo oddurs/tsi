@@ -6,11 +6,12 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 
 ## Features
 
-- **Two-stage optimization** - Find optimal staging for any delta-v target
+- **Multi-engine optimization** - Find optimal staging with mixed engine types
+- **Automatic optimizer selection** - Fast analytical or exhaustive brute-force search
 - **Stage performance calculations** - Delta-v, burn time, TWR
 - **Built-in engine database** - 11 real rocket engines with accurate specs
 - **Type-safe physics** - Compile-time unit safety prevents calculation errors
-- **Scriptable output** - JSON and compact formats for automation
+- **Scriptable output** - JSON and compact formats with optimization metadata
 
 ## Installation
 
@@ -158,6 +159,16 @@ done
 tsi engines --output json | jq '.[] | select(.propellant == "LoxCh4")'
 ```
 
+### Multi-engine optimization
+
+```bash
+# Let the optimizer find the best engine combination
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2,merlin-1d
+
+# Force brute-force search for exhaustive exploration
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --optimizer brute-force
+```
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
@@ -171,8 +182,9 @@ tsi engines --output json | jq '.[] | select(.propellant == "LoxCh4")'
 - [x] v0.1 - Foundation (unit types, physics, basic CLI)
 - [x] v0.2 - Engine database and enhanced calculations
 - [x] v0.3 - Two-stage optimization (`tsi optimize`)
-- [ ] v0.4 - Multiple engine types per rocket
+- [x] v0.4 - Multi-engine optimization with brute-force search
 - [ ] v0.5 - Monte Carlo uncertainty analysis
+- [ ] v0.6 - Polish (ASCII diagrams, shell completions)
 
 See [docs/plan/roadmap.md](docs/plan/roadmap.md) for detailed plans.
 

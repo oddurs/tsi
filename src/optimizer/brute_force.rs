@@ -219,11 +219,9 @@ impl BruteForceOptimizer {
             // We have a complete configuration, try to build it
             *iterations += 1;
 
-            if let Some(rocket) = self.try_build_rocket(
-                current_specs,
-                problem.payload,
-                &problem.constraints,
-            ) {
+            if let Some(rocket) =
+                self.try_build_rocket(current_specs, problem.payload, &problem.constraints)
+            {
                 let delta_v = rocket.total_delta_v();
                 let meets_target = delta_v.as_mps() >= problem.target_delta_v.as_mps();
 
@@ -295,7 +293,9 @@ impl Optimizer for BruteForceOptimizer {
 
         // Determine stage count range
         let min_stages = problem.stage_count.unwrap_or(1);
-        let max_stages = problem.stage_count.unwrap_or(problem.constraints.max_stages);
+        let max_stages = problem
+            .stage_count
+            .unwrap_or(problem.constraints.max_stages);
 
         // Search each stage count
         for stage_count in min_stages..=max_stages {
@@ -431,7 +431,7 @@ mod tests {
         let optimizer = BruteForceOptimizer::new(3, 1_000.0, 10_000.0);
 
         let problem = Problem::new(
-            Mass::kg(100_000.0), // Very heavy payload
+            Mass::kg(100_000.0),     // Very heavy payload
             Velocity::mps(15_000.0), // Very high delta-v
             vec![get_merlin()],
             Constraints::default(),

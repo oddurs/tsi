@@ -480,7 +480,7 @@ mod tests {
     fn analytical_optimizer_infeasible_delta_v() {
         // Test with impossibly high delta-v
         let problem = Problem::new(
-            Mass::kg(100_000.0), // Heavy payload
+            Mass::kg(100_000.0),     // Heavy payload
             Velocity::mps(50_000.0), // Way too high
             vec![get_raptor()],
             Constraints::default(),

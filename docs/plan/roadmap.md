@@ -135,43 +135,43 @@
 
 ---
 
-## Phase 4: Multi-Engine Optimization
+## Phase 4: Multi-Engine Optimization ✅ COMPLETE (v0.4.0)
 **Goal:** Handle multiple engine types and discrete choices
 
 ### 4.1 Problem Definition
-- [ ] Define `Problem` struct with full constraints
-- [ ] Support multiple available engines
-- [ ] Support variable stage count (1-N)
-- [ ] Support per-stage engine count limits
+- [x] Define `Problem` struct with full constraints
+- [x] Support multiple available engines
+- [x] Support variable stage count (1-N)
+- [x] Support per-stage engine count limits
 
 ### 4.2 Brute Force Optimizer
-- [ ] Implement grid search over discrete space
-- [ ] Iterate: stage count × engine choice × engine count × propellant mass
-- [ ] Prune infeasible configurations early (TWR check)
-- [ ] Track best solution seen
-- [ ] Add progress indicator for long searches
+- [x] Implement grid search over discrete space
+- [x] Iterate: stage count × engine choice × engine count × propellant mass
+- [x] Prune infeasible configurations early (TWR check)
+- [x] Track best solution seen
+- [ ] Add progress indicator for long searches (deferred to v0.5)
 
 ### 4.3 Optimizer Selection
-- [ ] Define `Optimizer` trait
-- [ ] Implement for `AnalyticalOptimizer`
-- [ ] Implement for `BruteForceOptimizer`
-- [ ] Auto-select based on problem complexity
-- [ ] Allow manual selection via `--optimizer` flag
+- [x] Define `Optimizer` trait
+- [x] Implement for `AnalyticalOptimizer`
+- [x] Implement for `BruteForceOptimizer`
+- [x] Auto-select based on problem complexity
+- [x] Allow manual selection via `--optimizer` flag
 
 ### 4.4 Enhanced Optimize Command
-- [ ] Accept comma-separated engine list
-- [ ] Accept `--max-stages` constraint
-- [ ] Accept `--max-engines` per stage constraint
-- [ ] Show search progress for brute force
-- [ ] Report number of configurations evaluated
+- [x] Accept comma-separated engine list
+- [x] Accept `--max-stages` constraint
+- [x] Accept `--max-engines` per stage constraint
+- [ ] Show search progress for brute force (deferred to v0.5)
+- [x] Report number of configurations evaluated
 
 ### 4.5 JSON Output
-- [ ] Implement `--output json` flag
-- [ ] Serialize full Solution to JSON
-- [ ] Include all stage parameters
-- [ ] Include metadata (runtime, iterations)
+- [x] Implement `--output json` flag
+- [x] Serialize full Solution to JSON
+- [x] Include all stage parameters
+- [x] Include metadata (runtime, iterations)
 
-**Deliverable:** `tsi optimize --payload 5000 --target-dv 9400 --engines merlin-1d,raptor-2,rl-10c --max-stages 3` finds optimal mixed-engine configuration.
+**Deliverable:** `tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,raptor-2 --max-stages 3` finds optimal mixed-engine configuration.
 
 ---
 
