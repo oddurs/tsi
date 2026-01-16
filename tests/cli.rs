@@ -730,3 +730,29 @@ fn optimize_uncertainty_none() {
         .success()
         .stdout(predicate::str::contains("100.0%")); // 100% success with no uncertainty
 }
+
+// ============================================================================
+// Diagram output
+// ============================================================================
+
+#[test]
+fn optimize_diagram_shows_ascii_rocket() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--diagram",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Payload"))
+        .stdout(predicate::str::contains("S1"))
+        .stdout(predicate::str::contains("S2"))
+        .stdout(predicate::str::contains("/\\")) // Nose cone
+        .stdout(predicate::str::contains("\\/")); // Nozzles
+}

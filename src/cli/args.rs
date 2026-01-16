@@ -212,6 +212,10 @@ pub struct OptimizeArgs {
     /// Uncertainty level for Monte Carlo (low, default, high, or custom ISP%)
     #[arg(long, value_enum, default_value = "default")]
     pub uncertainty: UncertaintyLevel,
+
+    /// Show ASCII rocket diagram
+    #[arg(long)]
+    pub diagram: bool,
 }
 
 /// Uncertainty level for Monte Carlo analysis.

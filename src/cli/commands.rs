@@ -5,7 +5,7 @@ use crate::optimizer::{
     AnalyticalOptimizer, BruteForceOptimizer, Constraints, MonteCarloRunner, Optimizer, Problem,
     Uncertainty,
 };
-use crate::output::terminal;
+use crate::output::{diagram, terminal};
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
@@ -432,6 +432,9 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     match args.output {
         OptimizeOutputFormat::Pretty => {
             print_solution_pretty(&args, &solution);
+            if args.diagram {
+                diagram::print_rocket_diagram(&solution.rocket, args.payload);
+            }
             if let Some(ref mc) = mc_results {
                 terminal::print_monte_carlo_results(mc);
             }
