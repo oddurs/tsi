@@ -6,6 +6,7 @@ use crate::optimizer::{
     Uncertainty,
 };
 use crate::output::{diagram, terminal};
+use crate::physics::losses;
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
@@ -435,6 +436,9 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
             if args.diagram {
                 diagram::print_rocket_diagram(&solution.rocket, args.payload);
             }
+            if args.show_losses {
+                print_losses_estimate(&solution);
+            }
             if let Some(ref mc) = mc_results {
                 terminal::print_monte_carlo_results(mc);
             }
@@ -542,4 +546,21 @@ fn print_solution_json(
 
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
+}
+
+/// Print estimated atmospheric and gravity losses.
+fn print_losses_estimate(solution: &crate::optimizer::Solution) {
+    let rocket = &solution.rocket;
+    let stages = rocket.stages();
+
+    // Use first stage parameters for loss estimation
+    if let Some(first_stage) = stages.first() {
+        let burn_time = first_stage.burn_time();
+        let liftoff_twr = rocket.liftoff_twr();
+
+        let estimate = losses::total_losses(burn_time, liftoff_twr);
+        let total_dv = rocket.total_delta_v().as_mps();
+
+        terminal::print_losses(&estimate, total_dv);
+    }
 }

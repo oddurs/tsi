@@ -756,3 +756,29 @@ fn optimize_diagram_shows_ascii_rocket() {
         .stdout(predicate::str::contains("/\\")) // Nose cone
         .stdout(predicate::str::contains("\\/")); // Nozzles
 }
+
+// ============================================================================
+// Atmospheric losses output
+// ============================================================================
+
+#[test]
+fn optimize_show_losses() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--show-losses",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ESTIMATED LOSSES"))
+        .stdout(predicate::str::contains("Gravity losses"))
+        .stdout(predicate::str::contains("Drag losses"))
+        .stdout(predicate::str::contains("Steering losses"))
+        .stdout(predicate::str::contains("LEO orbital v"));
+}

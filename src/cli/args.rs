@@ -216,6 +216,10 @@ pub struct OptimizeArgs {
     /// Show ASCII rocket diagram
     #[arg(long)]
     pub diagram: bool,
+
+    /// Show estimated atmospheric and gravity losses
+    #[arg(long)]
+    pub show_losses: bool,
 }
 
 /// Uncertainty level for Monte Carlo analysis.

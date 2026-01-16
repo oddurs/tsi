@@ -438,6 +438,79 @@ fn print_histogram(samples: &[f64], target: f64) {
     );
 }
 
+// ============================================================================
+// Atmospheric Losses Output
+// ============================================================================
+
+use crate::physics::losses::LossEstimate;
+
+/// Print estimated atmospheric and gravity losses.
+///
+/// Shows a breakdown of estimated losses for Earth-to-LEO ascent.
+pub fn print_losses(estimate: &LossEstimate, total_dv: f64) {
+    println!();
+    println!("  ┌{}┐", "─".repeat(BOX_WIDTH));
+    println!(
+        "  │  {:<width$}│",
+        "ESTIMATED LOSSES (Earth to LEO)",
+        width = BOX_WIDTH - 2
+    );
+    println!("  └{}┘", "─".repeat(BOX_WIDTH));
+    println!();
+
+    println!(
+        "  Gravity losses:   {:>7} m/s",
+        format_thousands_f64(estimate.gravity_loss_mps)
+    );
+    println!(
+        "  Drag losses:      {:>7} m/s",
+        format_thousands_f64(estimate.drag_loss_mps)
+    );
+    println!(
+        "  Steering losses:  {:>7} m/s",
+        format_thousands_f64(estimate.steering_loss_mps)
+    );
+    println!("  {}", "─".repeat(30));
+    println!(
+        "  Total losses:     {:>7} m/s",
+        format_thousands_f64(estimate.total_loss_mps)
+    );
+    println!();
+
+    // Calculate effective delta-v available for orbital velocity
+    let effective_dv = total_dv - estimate.total_loss_mps;
+    let orbital_v_leo = 7_800.0;
+
+    println!(
+        "  Ideal delta-v:    {:>7} m/s",
+        format_thousands_f64(total_dv)
+    );
+    println!(
+        "  After losses:     {:>7} m/s",
+        format_thousands_f64(effective_dv)
+    );
+    println!(
+        "  LEO orbital v:    {:>7} m/s",
+        format_thousands_f64(orbital_v_leo)
+    );
+
+    if effective_dv >= orbital_v_leo {
+        let margin = effective_dv - orbital_v_leo;
+        println!(
+            "  Margin:           {:>+7} m/s (sufficient)",
+            format_thousands_f64(margin)
+        );
+    } else {
+        let shortfall = orbital_v_leo - effective_dv;
+        println!(
+            "  Shortfall:        {:>7} m/s (insufficient)",
+            format_thousands_f64(shortfall)
+        );
+        println!();
+        println!("  ⚠ WARNING: Insufficient delta-v for LEO insertion");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

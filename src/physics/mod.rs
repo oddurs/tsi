@@ -6,6 +6,7 @@
 //! - [`required_mass_ratio`] - Inverse of the rocket equation
 //! - [`twr`] - Thrust-to-weight ratio calculation
 //! - [`burn_time`] - Engine burn duration
+//! - [`losses`] - Atmospheric and gravity loss estimation
 //!
 //! # Constants
 //!
@@ -38,6 +39,7 @@
 //! println!("Burn time: {}", burn);       // ~2m 51s
 //! ```
 
+pub mod losses;
 mod thrust;
 mod tsiolkovsky;
 
