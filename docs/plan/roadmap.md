@@ -1,5 +1,16 @@
 # tsi Development Roadmap
 
+## Release History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| v0.1.0 | 2026-01-14 | Foundation: type-safe units, Tsiolkovsky equation, `calculate` command |
+| v0.2.0 | 2026-01-14 | Engine database (11 engines), `engines` command, propellant types |
+| v0.3.0 | 2026-01-15 | Two-stage analytical optimizer, `optimize` command, JSON output |
+| v0.4.0 | 2026-01-15 | Multi-engine brute-force optimizer, parallel search (rayon), per-stage engines |
+
+---
+
 ## Phase 1: Foundation ✅ COMPLETE (v0.1.0)
 **Goal:** Working single-stage calculator with type-safe units
 
@@ -149,7 +160,7 @@
 - [x] Iterate: stage count × engine choice × engine count × propellant mass
 - [x] Prune infeasible configurations early (TWR check)
 - [x] Track best solution seen
-- [ ] Add progress indicator for long searches (deferred to v0.5)
+- [x] Progress indicator with percentage (--quiet to suppress)
 
 ### 4.3 Optimizer Selection
 - [x] Define `Optimizer` trait
@@ -162,8 +173,11 @@
 - [x] Accept comma-separated engine list
 - [x] Accept `--max-stages` constraint
 - [x] Accept `--max-engines` per stage constraint
-- [ ] Show search progress for brute force (deferred to v0.5)
+- [x] Show search progress for brute force
 - [x] Report number of configurations evaluated
+- [x] Per-stage engine flags (--stage1-engine, --stage2-engine)
+- [x] Vacuum engine preference for upper stages
+- [x] Two-phase coarse-to-fine search refinement
 
 ### 4.5 JSON Output
 - [x] Implement `--output json` flag
@@ -175,18 +189,20 @@
 
 ---
 
-## Phase 5: Uncertainty Analysis
+## Phase 5: Uncertainty Analysis (v0.5.0)
 **Goal:** Monte Carlo simulation for robust solutions
+
+*Libraries: `rand` for distributions, `rayon` (already added) for parallel execution*
 
 ### 5.1 Random Sampling
 - [ ] Add parameter uncertainty to Problem definition
 - [ ] Isp uncertainty (±X%)
 - [ ] Structural mass uncertainty (±X%)
 - [ ] Thrust uncertainty (±X%)
-- [ ] Sample from normal distributions
+- [ ] Sample from normal distributions (`rand_distr`)
 
 ### 5.2 Monte Carlo Runner
-- [ ] Implement parallel execution with rayon
+- [ ] Implement parallel execution with rayon (already in deps)
 - [ ] Run N iterations with perturbed parameters
 - [ ] Collect delta-v and mass distributions
 - [ ] Compute percentiles (5th, 50th, 95th)
@@ -207,8 +223,10 @@
 
 ---
 
-## Phase 6: Polish
+## Phase 6: Polish (v0.6.0)
 **Goal:** Production-ready CLI experience
+
+*Libraries: See [libraries.md](libraries.md) for `textplots` (ASCII charts), `ussa1976` (atmosphere model), `indicatif` (progress bars), `owo-colors` (colored output)*
 
 ### 6.1 ASCII Rocket Diagram
 - [ ] Generate simple ASCII art of rocket configuration
@@ -218,7 +236,7 @@
 
 ### 6.2 Atmospheric Losses
 - [ ] Implement gravity drag estimation
-- [ ] Implement atmospheric drag estimation
+- [ ] Implement atmospheric drag estimation (consider `ussa1976`)
 - [ ] Add to effective delta-v requirements
 - [ ] Document assumptions and limitations
 
@@ -244,7 +262,7 @@
 
 ---
 
-## Phase 7: Release
+## Phase 7: Release (v1.0.0)
 **Goal:** Public release on crates.io
 
 ### 7.1 Documentation
@@ -254,10 +272,11 @@
 - [ ] CONTRIBUTING.md
 
 ### 7.2 Testing
-- [x] Unit test coverage > 80% (85 unit tests)
-- [x] Integration tests for all commands (23 CLI tests)
+- [x] Unit test coverage > 80% (124 unit tests)
+- [x] Integration tests for all commands (37 CLI tests)
 - [x] Property-based tests for physics (10 proptest tests)
-- [x] Validation tests against real rockets (10 tests)
+- [x] Validation tests against real rockets (15 tests)
+- [x] Doc tests (22 tests)
 - [ ] CI pipeline (GitHub Actions)
 
 ### 7.3 Packaging
@@ -279,23 +298,41 @@
 
 ## Future Phases (Post-1.0)
 
+*See [libraries.md](libraries.md) for detailed library recommendations*
+
 ### Phase 8: Interactive TUI
+*Libraries: `ratatui`, `crossterm`*
 - [ ] Ratatui-based interactive mode
 - [ ] Real-time parameter adjustment
 - [ ] Visual staging diagram
 - [ ] Live delta-v budget display
 
 ### Phase 9: Trajectory Simulation
-- [ ] Numerical integration of ascent
+*Libraries: `ode_solvers`, `nalgebra`, `ussa1976`*
+- [ ] Numerical integration of ascent (RK4/DOP853)
 - [ ] Altitude/velocity profiles
-- [ ] Actual atmospheric model
+- [ ] US Standard Atmosphere 1976 model
 - [ ] Comparison with ideal delta-v
+- [ ] Gravity turn modeling
 
-### Phase 10: Cost Optimization
+### Phase 10: Genetic Algorithm Optimization
+*Libraries: `genevo`, `argmin`*
+- [ ] Genetic algorithm for large search spaces
+- [ ] Multi-objective optimization (mass vs cost)
+- [ ] Pareto-optimal solution sets
+- [ ] Custom fitness functions
+
+### Phase 11: Cost Optimization
 - [ ] Engine cost database
 - [ ] $/kg to orbit optimization
 - [ ] Reusability cost models
 - [ ] Trade study generation
+
+### Phase 12: Web & Python
+*Libraries: `wasm-bindgen`, `pyo3`*
+- [ ] WebAssembly build for browser
+- [ ] Python bindings via PyO3
+- [ ] REST API wrapper
 
 ---
 
@@ -334,3 +371,21 @@ Each phase is complete when:
 - Write tests as you go, not after
 - Each phase should produce something usable
 - Don't over-engineer early; refactor as patterns emerge
+
+---
+
+## Dependencies
+
+See [libraries.md](libraries.md) for a curated list of Rust crates that could expand `tsi`'s capabilities.
+
+**Currently Used:**
+- `clap` - CLI argument parsing with derive macros
+- `serde`, `serde_json`, `toml` - Serialization for config and output
+- `anyhow`, `thiserror` - Error handling
+- `rayon` - Parallel brute-force search (added v0.4.0)
+- `comfy-table` - Engine listing tables
+- `num-format` - Thousands separators in output
+
+**Dev Dependencies:**
+- `assert_cmd`, `predicates` - CLI integration testing
+- `proptest` - Property-based testing for physics
