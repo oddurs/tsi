@@ -36,6 +36,8 @@
 //! - Sutton, G.P. "Rocket Propulsion Elements", Chapter 4
 //! - Curtis, H.D. "Orbital Mechanics for Engineering Students", Chapter 11
 
+use std::time::Instant;
+
 use crate::engine::Engine;
 use crate::physics::{required_mass_ratio, G0};
 use crate::stage::{Rocket, Stage};
@@ -199,6 +201,8 @@ impl AnalyticalOptimizer {
 
 impl Optimizer for AnalyticalOptimizer {
     fn optimize(&self, problem: &Problem) -> Result<Solution, OptimizeError> {
+        let start = Instant::now();
+
         // Validate the problem
         problem.is_valid()?;
 
@@ -318,8 +322,14 @@ impl Optimizer for AnalyticalOptimizer {
                 reason: e.to_string(),
             })?;
 
-        // Create solution
-        let solution = Solution::new(rocket, problem.target_delta_v, 1);
+        // Create solution with metadata
+        let solution = Solution::with_metadata(
+            rocket,
+            problem.target_delta_v,
+            1, // Analytical optimizer evaluates a single configuration
+            start.elapsed(),
+            "Analytical",
+        );
 
         // Verify we meet the target (with small tolerance for floating point)
         if solution.margin.as_mps() < -1.0 {

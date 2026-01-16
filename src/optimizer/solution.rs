@@ -3,6 +3,8 @@
 //! A solution contains the optimal rocket configuration found by the optimizer,
 //! along with metadata about the optimization process.
 
+use std::time::Duration;
+
 use crate::stage::Rocket;
 use crate::units::Velocity;
 
@@ -20,6 +22,13 @@ use crate::units::Velocity;
 /// - Navigation corrections
 /// - Propellant reserves
 ///
+/// # Metadata
+///
+/// The solution includes optimization metadata:
+/// - `iterations`: Number of configurations evaluated
+/// - `runtime`: Time taken for optimization
+/// - `optimizer_name`: Which optimizer was used
+///
 /// # Example
 ///
 /// ```ignore
@@ -28,6 +37,7 @@ use crate::units::Velocity;
 /// println!("Total mass: {}", solution.rocket.total_mass());
 /// println!("Delta-v margin: +{} m/s", solution.margin.as_mps());
 /// println!("Payload fraction: {:.2}%", solution.payload_fraction_percent());
+/// println!("Evaluated {} configurations in {:?}", solution.iterations, solution.runtime);
 /// ```
 #[derive(Debug, Clone)]
 pub struct Solution {
@@ -39,6 +49,12 @@ pub struct Solution {
 
     /// Number of iterations/configurations evaluated
     pub iterations: u64,
+
+    /// Time taken for optimization
+    pub runtime: Duration,
+
+    /// Name of the optimizer used
+    pub optimizer_name: String,
 }
 
 impl Solution {
@@ -50,6 +66,27 @@ impl Solution {
             rocket,
             margin,
             iterations,
+            runtime: Duration::ZERO,
+            optimizer_name: String::new(),
+        }
+    }
+
+    /// Create a solution with full metadata.
+    pub fn with_metadata(
+        rocket: Rocket,
+        target_dv: Velocity,
+        iterations: u64,
+        runtime: Duration,
+        optimizer_name: &str,
+    ) -> Self {
+        let actual_dv = rocket.total_delta_v();
+        let margin = Velocity::mps(actual_dv.as_mps() - target_dv.as_mps());
+        Self {
+            rocket,
+            margin,
+            iterations,
+            runtime,
+            optimizer_name: optimizer_name.to_string(),
         }
     }
 
