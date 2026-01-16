@@ -9,6 +9,7 @@
 | v0.3.0 | 2026-01-15 | Two-stage analytical optimizer, `optimize` command, JSON output |
 | v0.4.0 | 2026-01-15 | Multi-engine brute-force optimizer, parallel search (rayon), per-stage engines |
 | v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, --monte-carlo flag, confidence intervals |
+| v0.6.0 | 2026-01-16 | Polish: ASCII diagrams, shell completions, custom engines, atmospheric losses |
 
 ---
 
@@ -225,40 +226,40 @@
 
 ---
 
-## Phase 6: Polish (v0.6.0)
+## Phase 6: Polish ✅ COMPLETE (v0.6.0)
 **Goal:** Production-ready CLI experience
 
-*Libraries: See [libraries.md](libraries.md) for `textplots` (ASCII charts), `ussa1976` (atmosphere model), `indicatif` (progress bars), `owo-colors` (colored output)*
+*Libraries: `clap_complete` for shell completions, `clap_mangen` for man page*
 
 ### 6.1 ASCII Rocket Diagram
-- [ ] Generate simple ASCII art of rocket configuration
-- [ ] Scale stage heights by propellant mass
-- [ ] Label stages with engine names
-- [ ] Add `--diagram` flag to optimize output
+- [x] Generate simple ASCII art of rocket configuration
+- [x] Scale stage heights by propellant mass
+- [x] Label stages with engine names
+- [x] Add `--diagram` flag to optimize output
 
 ### 6.2 Atmospheric Losses
-- [ ] Implement gravity drag estimation
-- [ ] Implement atmospheric drag estimation (consider `ussa1976`)
-- [ ] Add to effective delta-v requirements
-- [ ] Document assumptions and limitations
+- [x] Implement gravity drag estimation
+- [x] Implement atmospheric drag estimation (empirical model)
+- [x] Add to effective delta-v requirements via `--show-losses`
+- [x] Document assumptions and limitations
 
 ### 6.3 Custom Engines
-- [ ] Accept inline engine definition via CLI
-- [ ] Format: `--custom-engine "name:thrust:isp:mass:propellant"`
-- [ ] Validate parameters before optimization
-- [ ] Allow mixing custom and database engines
+- [x] Accept inline engine definition via CLI
+- [x] Format: `--custom-engine "name:thrust:isp:mass:propellant"`
+- [x] Validate parameters before optimization
+- [x] Allow mixing custom and database engines
 
 ### 6.4 Shell Integration
-- [ ] Generate shell completions (bash, zsh, fish)
-- [ ] Generate man page
-- [ ] Add `tsi completions` subcommand
-- [ ] Document installation in README
+- [x] Generate shell completions (bash, zsh, fish)
+- [x] Generate man page
+- [x] Add `tsi completions` subcommand
+- [x] Document installation in README
 
 ### 6.5 Error Handling
-- [ ] Review all error paths
-- [ ] Add helpful error messages
-- [ ] Suggest fixes for common mistakes
-- [ ] Exit codes follow conventions
+- [x] Review all error paths
+- [x] Add helpful error messages with suggestions
+- [x] Suggest fixes for common mistakes (infeasible solutions)
+- [x] Exit codes follow conventions
 
 **Deliverable:** Polished CLI with completions, man page, and helpful errors.
 

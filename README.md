@@ -8,6 +8,10 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 
 - **Multi-engine optimization** - Find optimal staging with mixed engine types
 - **Monte Carlo uncertainty analysis** - Assess design robustness with statistical simulation
+- **Custom engine support** - Define inline engines for hypothetical analysis
+- **Atmospheric loss estimation** - Gravity drag and atmospheric drag approximations
+- **ASCII rocket diagrams** - Visual representation of rocket configurations
+- **Shell completions** - Bash, Zsh, and Fish auto-completion
 - **Automatic optimizer selection** - Fast analytical or exhaustive brute-force search
 - **Stage performance calculations** - Delta-v, burn time, TWR
 - **Built-in engine database** - 11 real rocket engines with accurate specs
@@ -111,6 +115,7 @@ $ tsi calculate --engine raptor-2 --propellant-mass 100000 -o compact
 | `tsi optimize` | Find optimal staging for a delta-v target |
 | `tsi calculate` | Calculate delta-v for a single stage |
 | `tsi engines` | List available rocket engines |
+| `tsi completions` | Generate shell completions or man page |
 
 Run `tsi <command> --help` for detailed options.
 
@@ -158,6 +163,47 @@ done
 
 ```bash
 tsi engines --output json | jq '.[] | select(.propellant == "LoxCh4")'
+```
+
+### Custom engines
+
+```bash
+# Define a hypothetical engine inline (name:thrust_kn:isp_s:mass_kg:propellant)
+$ tsi optimize --payload 5000 --target-dv 9400 \
+    --custom-engine "SuperEngine:3000:380:2000:loxch4" --engine SuperEngine
+```
+
+### ASCII rocket diagram
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
+
+      /\
+     /  \
+    /    \   <- Payload (5k kg)
+   /______\
+ |     S2     |  <- Stage 2: Raptor-2 x1
+ |____________|
+ |            |
+ |     S1     |  <- Stage 1: Raptor-2 x2
+ |____________|
+    \    /
+     \  /
+      \/
+```
+
+### Atmospheric loss estimation
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --show-losses
+
+  ESTIMATED LOSSES (Earth to LEO)
+
+  Gravity losses:       603 m/s
+  Drag losses:          183 m/s
+  Total losses:         886 m/s
+
+  After losses:       8,702 m/s (sufficient for LEO)
 ```
 
 ### Multi-engine optimization
@@ -212,7 +258,8 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
 - [x] v0.3 - Two-stage optimization (`tsi optimize`)
 - [x] v0.4 - Multi-engine optimization with brute-force search
 - [x] v0.5 - Monte Carlo uncertainty analysis
-- [ ] v0.6 - Polish (ASCII diagrams, shell completions)
+- [x] v0.6 - Polish (ASCII diagrams, shell completions, custom engines)
+- [ ] v1.0 - Production release
 
 See [docs/plan/roadmap.md](docs/plan/roadmap.md) for detailed plans.
 
