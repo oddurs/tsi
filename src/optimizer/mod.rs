@@ -41,12 +41,14 @@
 
 mod analytical;
 mod brute_force;
+mod monte_carlo;
 mod problem;
 mod solution;
 mod uncertainty;
 
 pub use analytical::AnalyticalOptimizer;
 pub use brute_force::BruteForceOptimizer;
+pub use monte_carlo::{MonteCarloResults, MonteCarloRunner};
 pub use problem::{ConstraintError, Constraints, Problem, ProblemError};
 pub use solution::Solution;
 pub use uncertainty::{ParameterSampler, Uncertainty};
