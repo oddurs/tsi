@@ -52,8 +52,8 @@ use rayon::prelude::*;
 use serde::Serialize;
 
 use super::{
-    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer, Problem,
-    ParameterSampler, Solution, Uncertainty,
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer,
+    ParameterSampler, Problem, Solution, Uncertainty,
 };
 use crate::engine::Engine;
 use crate::units::Velocity;
@@ -147,9 +147,12 @@ impl MonteCarloResults {
             return 0.0;
         }
         let mean = self.mean_delta_v();
-        let variance = self.delta_v_samples.iter()
+        let variance = self
+            .delta_v_samples
+            .iter()
             .map(|&x| (x - mean).powi(2))
-            .sum::<f64>() / (self.delta_v_samples.len() - 1) as f64;
+            .sum::<f64>()
+            / (self.delta_v_samples.len() - 1) as f64;
         variance.sqrt()
     }
 
@@ -205,8 +208,16 @@ impl MonteCarloResults {
                 percentile_5: self.delta_v_percentile(5.0),
                 percentile_50: self.delta_v_percentile(50.0),
                 percentile_95: self.delta_v_percentile(95.0),
-                min: self.delta_v_samples.iter().cloned().fold(f64::INFINITY, f64::min),
-                max: self.delta_v_samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                min: self
+                    .delta_v_samples
+                    .iter()
+                    .cloned()
+                    .fold(f64::INFINITY, f64::min),
+                max: self
+                    .delta_v_samples
+                    .iter()
+                    .cloned()
+                    .fold(f64::NEG_INFINITY, f64::max),
             },
             mass: DistributionSummary {
                 mean: self.mean_mass(),
@@ -214,8 +225,16 @@ impl MonteCarloResults {
                 percentile_5: self.mass_percentile(5.0),
                 percentile_50: self.mass_percentile(50.0),
                 percentile_95: self.mass_percentile(95.0),
-                min: self.mass_samples.iter().cloned().fold(f64::INFINITY, f64::min),
-                max: self.mass_samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                min: self
+                    .mass_samples
+                    .iter()
+                    .cloned()
+                    .fold(f64::INFINITY, f64::min),
+                max: self
+                    .mass_samples
+                    .iter()
+                    .cloned()
+                    .fold(f64::NEG_INFINITY, f64::max),
             },
             required_margin_95_mps: self.required_margin(0.95),
         }
@@ -331,7 +350,11 @@ impl MonteCarloRunner {
     /// # Errors
     ///
     /// Returns an error if the nominal problem is invalid.
-    pub fn run(&self, problem: &Problem, iterations: u64) -> Result<MonteCarloResults, OptimizeError> {
+    pub fn run(
+        &self,
+        problem: &Problem,
+        iterations: u64,
+    ) -> Result<MonteCarloResults, OptimizeError> {
         // Validate the nominal problem first
         problem.is_valid()?;
 
@@ -368,15 +391,15 @@ impl MonteCarloRunner {
         // Run parallel iterations
         (0..iterations).into_par_iter().for_each(|_| {
             // Perturb engines
-            let perturbed_engines: Vec<Engine> = problem.available_engines
+            let perturbed_engines: Vec<Engine> = problem
+                .available_engines
                 .iter()
                 .map(|e| sampler.perturb_engine(e))
                 .collect();
 
             // Perturb structural ratio
-            let perturbed_structural = sampler.perturb_structural_ratio(
-                problem.constraints.structural_ratio
-            );
+            let perturbed_structural =
+                sampler.perturb_structural_ratio(problem.constraints.structural_ratio);
 
             // Create perturbed problem
             let perturbed_constraints = Constraints {
@@ -425,7 +448,10 @@ impl MonteCarloRunner {
         }
 
         Ok(MonteCarloResults {
-            delta_v_samples: Arc::try_unwrap(delta_v_samples).unwrap().into_inner().unwrap(),
+            delta_v_samples: Arc::try_unwrap(delta_v_samples)
+                .unwrap()
+                .into_inner()
+                .unwrap(),
             mass_samples: Arc::try_unwrap(mass_samples).unwrap().into_inner().unwrap(),
             successes: successes.load(Ordering::Relaxed),
             total_runs: iterations,
@@ -466,7 +492,8 @@ mod tests {
             Velocity::mps(9_400.0),
             vec![get_raptor()],
             Constraints::default(),
-        ).with_stage_count(2)
+        )
+        .with_stage_count(2)
     }
 
     #[test]
@@ -474,7 +501,9 @@ mod tests {
         let runner = MonteCarloRunner::new(Uncertainty::none());
         let problem = simple_problem();
 
-        let results = runner.run(&problem, 10).expect("monte carlo should succeed");
+        let results = runner
+            .run(&problem, 10)
+            .expect("monte carlo should succeed");
 
         // With zero uncertainty, should have 100% success
         assert_eq!(results.successes, 1);
@@ -487,20 +516,28 @@ mod tests {
         let runner = MonteCarloRunner::new(Uncertainty::default());
         let problem = simple_problem();
 
-        let results = runner.run(&problem, 100).expect("monte carlo should succeed");
+        let results = runner
+            .run(&problem, 100)
+            .expect("monte carlo should succeed");
 
         // Should have completed 100 runs
         assert_eq!(results.total_runs, 100);
 
         // Most runs should succeed (design has margin)
-        assert!(results.success_probability() > 0.5,
-            "Expected >50% success, got {:.1}%", results.success_probability() * 100.0);
+        assert!(
+            results.success_probability() > 0.5,
+            "Expected >50% success, got {:.1}%",
+            results.success_probability() * 100.0
+        );
 
         // Delta-v samples should be reasonable
         assert!(!results.delta_v_samples.is_empty());
         let mean_dv = results.mean_delta_v();
-        assert!(mean_dv > 9000.0 && mean_dv < 11000.0,
-            "Mean delta-v {} outside expected range", mean_dv);
+        assert!(
+            mean_dv > 9000.0 && mean_dv < 11000.0,
+            "Mean delta-v {} outside expected range",
+            mean_dv
+        );
     }
 
     #[test]

@@ -27,7 +27,8 @@ These are the essentials — already planned for the initial release.
 | Crate | Purpose | Status | Notes |
 |-------|---------|--------|-------|
 | `rayon` | Data parallelism | ✅ v0.4 | Parallel brute-force search |
-| `rand` | Random numbers | 📋 v0.5 | Distributions for uncertainty analysis |
+| `rand` | Random numbers | ✅ v0.5 | Base random number generation |
+| `rand_distr` | Distributions | ✅ v0.5 | Normal distribution for Monte Carlo |
 
 ### Terminal Output
 
@@ -496,8 +497,8 @@ Custom units, `clap`, `serde`, `serde_json`, `toml`, `anyhow`, `thiserror`, `com
 ### Phase 4 (Multi-Engine) ✅ COMPLETE
 Added `rayon` for parallel search (custom stderr progress, not `indicatif`)
 
-### Phase 5 (Monte Carlo) — NEXT
-Add `rand`, `rand_distr` for distributions
+### Phase 5 (Monte Carlo) ✅ COMPLETE
+Added `rand_distr` for normal distributions (rand already in deps)
 
 ### Phase 6 (Polish)
 Consider `indicatif` for better progress bars, `owo-colors` for colored output
