@@ -190,6 +190,20 @@ pub fn print_solution_with_options(
         println!("  Note: TWR calculated for g = {:.2} m/s²", gravity);
     }
 
+    // Optimizer metadata
+    if !solution.optimizer_name.is_empty() {
+        println!();
+        let runtime = if solution.runtime.as_millis() > 0 {
+            format!(" in {}ms", solution.runtime.as_millis())
+        } else {
+            String::new()
+        };
+        println!(
+            "  Optimizer: {} ({} configs{})",
+            solution.optimizer_name, solution.iterations, runtime
+        );
+    }
+
     println!();
 
     print_footer();

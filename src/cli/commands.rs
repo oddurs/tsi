@@ -471,6 +471,11 @@ fn print_solution_json(
         "margin_mps": solution.margin.as_mps(),
         "margin_percent": solution.margin_percent(Velocity::mps(args.target_dv)),
         "stages": stages_json,
+        "metadata": {
+            "optimizer": solution.optimizer_name,
+            "iterations": solution.iterations,
+            "runtime_ms": solution.runtime.as_millis(),
+        },
     });
 
     println!("{}", serde_json::to_string_pretty(&output)?);

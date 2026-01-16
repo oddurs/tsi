@@ -555,3 +555,25 @@ fn optimize_multi_engine_comma_separated() {
         .success()
         .stdout(predicate::str::contains("Staging Optimization Complete"));
 }
+
+#[test]
+fn optimize_json_includes_metadata() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--output",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"metadata\""))
+        .stdout(predicate::str::contains("\"optimizer\""))
+        .stdout(predicate::str::contains("\"iterations\""))
+        .stdout(predicate::str::contains("\"runtime_ms\""));
+}
