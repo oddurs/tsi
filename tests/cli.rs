@@ -613,3 +613,120 @@ fn optimize_per_stage_engines() {
         .success()
         .stdout(predicate::str::contains("STAGE 1"));
 }
+
+// ============================================================================
+// Monte Carlo Analysis
+// ============================================================================
+
+#[test]
+fn optimize_monte_carlo_basic() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "50",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"))
+        .stdout(predicate::str::contains("Success probability"));
+}
+
+#[test]
+fn optimize_monte_carlo_with_uncertainty_level() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "30",
+            "--uncertainty",
+            "high",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"));
+}
+
+#[test]
+fn optimize_monte_carlo_json_output() {
+    let output = tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "20",
+            "--output",
+            "json",
+        ])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json["monte_carlo"].is_object());
+    assert!(json["monte_carlo"]["success_probability"].is_number());
+    assert!(json["monte_carlo"]["delta_v"]["mean"].is_number());
+}
+
+#[test]
+fn optimize_monte_carlo_shows_confidence_intervals() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "100",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Confidence Intervals"))
+        .stdout(predicate::str::contains("5th %ile"))
+        .stdout(predicate::str::contains("95th %ile"));
+}
+
+#[test]
+fn optimize_uncertainty_none() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "10",
+            "--uncertainty",
+            "none",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("100.0%")); // 100% success with no uncertainty
+}

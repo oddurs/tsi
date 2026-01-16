@@ -1,14 +1,17 @@
 use anyhow::{bail, Result};
 
 use crate::engine::EngineDatabase;
-use crate::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Constraints, Optimizer, Problem};
+use crate::optimizer::{
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, MonteCarloRunner, Optimizer, Problem,
+    Uncertainty,
+};
 use crate::output::terminal;
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
 use super::args::{
     CalculateArgs, CalculateOutputFormat, EnginesArgs, OptimizeArgs, OptimizeOutputFormat,
-    OptimizerChoice, OutputFormat,
+    OptimizerChoice, OutputFormat, UncertaintyLevel,
 };
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
@@ -410,17 +413,45 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         }
     };
 
+    // Run Monte Carlo analysis if requested
+    let mc_results = if let Some(iterations) = args.monte_carlo {
+        let uncertainty = uncertainty_from_level(args.uncertainty);
+        let show_mc_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
+
+        let runner = MonteCarloRunner::new(uncertainty).with_progress(show_mc_progress);
+        Some(
+            runner
+                .run(&problem, iterations)
+                .map_err(|e| anyhow::anyhow!("{}", e))?,
+        )
+    } else {
+        None
+    };
+
     // Output results
     match args.output {
         OptimizeOutputFormat::Pretty => {
             print_solution_pretty(&args, &solution);
+            if let Some(ref mc) = mc_results {
+                terminal::print_monte_carlo_results(mc);
+            }
         }
         OptimizeOutputFormat::Json => {
-            print_solution_json(&args, &solution)?;
+            print_solution_json(&args, &solution, mc_results.as_ref())?;
         }
     }
 
     Ok(())
+}
+
+/// Convert CLI uncertainty level to Uncertainty struct.
+fn uncertainty_from_level(level: UncertaintyLevel) -> Uncertainty {
+    match level {
+        UncertaintyLevel::None => Uncertainty::none(),
+        UncertaintyLevel::Low => Uncertainty::new(0.5, 3.0, 1.0),
+        UncertaintyLevel::Default => Uncertainty::default(),
+        UncertaintyLevel::High => Uncertainty::new(2.0, 8.0, 3.0),
+    }
 }
 
 /// Which optimizer to use.
@@ -459,7 +490,11 @@ fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solut
     );
 }
 
-fn print_solution_json(args: &OptimizeArgs, solution: &crate::optimizer::Solution) -> Result<()> {
+fn print_solution_json(
+    args: &OptimizeArgs,
+    solution: &crate::optimizer::Solution,
+    mc_results: Option<&crate::optimizer::MonteCarloResults>,
+) -> Result<()> {
     let rocket = &solution.rocket;
     let stages = rocket.stages();
 
@@ -481,7 +516,7 @@ fn print_solution_json(args: &OptimizeArgs, solution: &crate::optimizer::Solutio
         })
         .collect();
 
-    let output = serde_json::json!({
+    let mut output = serde_json::json!({
         "target_delta_v_mps": args.target_dv,
         "payload_kg": args.payload,
         "total_mass_kg": rocket.total_mass().as_kg(),
@@ -496,6 +531,11 @@ fn print_solution_json(args: &OptimizeArgs, solution: &crate::optimizer::Solutio
             "runtime_ms": solution.runtime.as_millis(),
         },
     });
+
+    // Add Monte Carlo results if available
+    if let Some(mc) = mc_results {
+        output["monte_carlo"] = serde_json::to_value(mc.to_json_summary())?;
+    }
 
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())

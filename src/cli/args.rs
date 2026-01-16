@@ -204,6 +204,28 @@ pub struct OptimizeArgs {
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: OptimizeOutputFormat,
+
+    /// Run Monte Carlo uncertainty analysis with N iterations
+    #[arg(long, value_name = "N")]
+    pub monte_carlo: Option<u64>,
+
+    /// Uncertainty level for Monte Carlo (low, default, high, or custom ISP%)
+    #[arg(long, value_enum, default_value = "default")]
+    pub uncertainty: UncertaintyLevel,
+}
+
+/// Uncertainty level for Monte Carlo analysis.
+#[derive(Clone, Copy, ValueEnum, Default)]
+pub enum UncertaintyLevel {
+    /// No uncertainty (0%)
+    None,
+    /// Low uncertainty (ISP ±0.5%, thrust ±1%, structural ±3%)
+    Low,
+    /// Default uncertainty (ISP ±1%, thrust ±2%, structural ±5%)
+    #[default]
+    Default,
+    /// High uncertainty (ISP ±2%, thrust ±3%, structural ±8%)
+    High,
 }
 
 /// Optimizer algorithm to use.
