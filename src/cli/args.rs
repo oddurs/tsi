@@ -161,6 +161,14 @@ pub struct OptimizeArgs {
     #[arg(short, long)]
     pub engine: String,
 
+    /// Force specific engine for first stage (overrides --engine for stage 1)
+    #[arg(long)]
+    pub stage1_engine: Option<String>,
+
+    /// Force specific engine for second stage (overrides --engine for stage 2)
+    #[arg(long)]
+    pub stage2_engine: Option<String>,
+
     /// Minimum thrust-to-weight ratio at liftoff
     #[arg(long, default_value = "1.2")]
     pub min_twr: f64,
@@ -188,6 +196,10 @@ pub struct OptimizeArgs {
     /// Optimizer algorithm (auto-selects if not specified)
     #[arg(long, value_enum, default_value = "auto")]
     pub optimizer: OptimizerChoice,
+
+    /// Hide progress indicator (useful for scripts)
+    #[arg(long)]
+    pub quiet: bool,
 
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
@@ -228,7 +240,7 @@ impl Gravity {
     }
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OptimizeOutputFormat {
     /// Detailed pretty-printed output
     Pretty,
