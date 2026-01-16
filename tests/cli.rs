@@ -865,3 +865,45 @@ fn optimize_mix_custom_and_database_engines() {
         .assert()
         .success();
 }
+
+// ============================================================================
+// Shell completions
+// ============================================================================
+
+#[test]
+fn completions_bash() {
+    tsi()
+        .args(["completions", "bash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("_tsi()"))
+        .stdout(predicate::str::contains("COMPREPLY"));
+}
+
+#[test]
+fn completions_zsh() {
+    tsi()
+        .args(["completions", "zsh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#compdef tsi"));
+}
+
+#[test]
+fn completions_fish() {
+    tsi()
+        .args(["completions", "fish"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("complete -c tsi"));
+}
+
+#[test]
+fn completions_man_page() {
+    tsi()
+        .args(["completions", "--man"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(".TH tsi"))
+        .stdout(predicate::str::contains("SYNOPSIS"));
+}

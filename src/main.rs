@@ -10,5 +10,6 @@ fn main() -> Result<()> {
         Command::Calculate(args) => commands::calculate(args),
         Command::Optimize(args) => commands::optimize(args),
         Command::Engines(args) => commands::engines(args),
+        Command::Completions(args) => commands::completions(args),
     }
 }

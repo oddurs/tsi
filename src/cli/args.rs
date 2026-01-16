@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 
 #[derive(Parser)]
 #[command(name = "tsi")]
@@ -42,6 +43,15 @@ Examples:
   tsi engines --name raptor
   tsi engines --output json")]
     Engines(EnginesArgs),
+
+    /// Generate shell completions or man page
+    #[command(after_help = "\
+Examples:
+  tsi completions bash > ~/.local/share/bash-completion/completions/tsi
+  tsi completions zsh > ~/.zfunc/_tsi
+  tsi completions fish > ~/.config/fish/completions/tsi.fish
+  tsi completions --man > /usr/local/share/man/man1/tsi.1")]
+    Completions(CompletionsArgs),
 }
 
 #[derive(Args)]
@@ -286,4 +296,16 @@ pub enum OptimizeOutputFormat {
     Pretty,
     /// JSON output
     Json,
+}
+
+/// Arguments for the completions command.
+#[derive(Args)]
+pub struct CompletionsArgs {
+    /// Shell to generate completions for
+    #[arg(value_enum)]
+    pub shell: Option<Shell>,
+
+    /// Generate man page instead of shell completions
+    #[arg(long)]
+    pub man: bool,
 }

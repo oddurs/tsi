@@ -1,4 +1,8 @@
+use std::io;
+
 use anyhow::{bail, Result};
+use clap::CommandFactory;
+use clap_complete::generate;
 
 use crate::engine::{Engine, EngineDatabase, Propellant};
 use crate::optimizer::{
@@ -11,8 +15,8 @@ use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
 use super::args::{
-    CalculateArgs, CalculateOutputFormat, EnginesArgs, OptimizeArgs, OptimizeOutputFormat,
-    OptimizerChoice, OutputFormat, UncertaintyLevel,
+    CalculateArgs, CalculateOutputFormat, Cli, CompletionsArgs, EnginesArgs, OptimizeArgs,
+    OptimizeOutputFormat, OptimizerChoice, OutputFormat, UncertaintyLevel,
 };
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
@@ -688,4 +692,30 @@ fn parse_propellant(s: &str) -> Result<Propellant> {
         "solid" => Ok(Propellant::Solid),
         _ => bail!("Unknown propellant type: {}", s),
     }
+}
+
+/// Generate shell completions or man page.
+pub fn completions(args: CompletionsArgs) -> Result<()> {
+    if args.man {
+        // Generate man page
+        let cmd = Cli::command();
+        let man = clap_mangen::Man::new(cmd);
+        man.render(&mut io::stdout())?;
+    } else if let Some(shell) = args.shell {
+        // Generate shell completions
+        let mut cmd = Cli::command();
+        let name = cmd.get_name().to_string();
+        generate(shell, &mut cmd, name, &mut io::stdout());
+    } else {
+        bail!(
+            "Please specify a shell or --man.\n\n\
+            Usage:\n  \
+            tsi completions bash     # Bash completions\n  \
+            tsi completions zsh      # Zsh completions\n  \
+            tsi completions fish     # Fish completions\n  \
+            tsi completions --man    # Man page"
+        );
+    }
+
+    Ok(())
 }
