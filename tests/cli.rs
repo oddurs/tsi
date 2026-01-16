@@ -494,3 +494,64 @@ fn optimize_engine_case_insensitive() {
         .success()
         .stdout(predicate::str::contains("Raptor-2"));
 }
+
+// ============================================================================
+// Optimizer selection
+// ============================================================================
+
+#[test]
+fn optimize_with_analytical_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "analytical",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_with_brute_force_flag() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--optimizer",
+            "brute-force",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("STAGE 1"));
+}
+
+#[test]
+fn optimize_multi_engine_comma_separated() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9000",
+            "--engine",
+            "raptor-2,merlin-1d",
+            "--optimizer",
+            "brute-force",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Staging Optimization Complete"));
+}

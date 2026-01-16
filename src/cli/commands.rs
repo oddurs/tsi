@@ -1,14 +1,14 @@
 use anyhow::{bail, Result};
 
 use crate::engine::EngineDatabase;
-use crate::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+use crate::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Constraints, Optimizer, Problem};
 use crate::output::terminal;
 use crate::physics::{burn_time, delta_v, twr, G0};
 use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
 use super::args::{
     CalculateArgs, CalculateOutputFormat, EnginesArgs, OptimizeArgs, OptimizeOutputFormat,
-    OutputFormat,
+    OptimizerChoice, OutputFormat,
 };
 
 pub fn calculate(args: CalculateArgs) -> Result<()> {
@@ -337,20 +337,26 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         bail!("{}", msg.trim_end());
     }
 
-    // Load engine database and look up engine
+    // Load engine database and look up engines (comma-separated)
     let db = EngineDatabase::default();
-    let engine = db.get(&args.engine).ok_or_else(|| {
-        let mut msg = format!("Unknown engine: '{}'", args.engine);
-        let suggestions = db.suggest(&args.engine);
-        if !suggestions.is_empty() {
-            msg.push_str("\n\nDid you mean:");
-            for s in suggestions {
-                msg.push_str(&format!("\n  {}", s));
+    let engine_names: Vec<&str> = args.engine.split(',').map(|s| s.trim()).collect();
+    let mut engines = Vec::new();
+
+    for engine_name in &engine_names {
+        let engine = db.get(engine_name).ok_or_else(|| {
+            let mut msg = format!("Unknown engine: '{}'", engine_name);
+            let suggestions = db.suggest(engine_name);
+            if !suggestions.is_empty() {
+                msg.push_str("\n\nDid you mean:");
+                for s in suggestions {
+                    msg.push_str(&format!("\n  {}", s));
+                }
             }
-        }
-        msg.push_str("\n\nRun `tsi engines` to see all available engines.");
-        anyhow::anyhow!(msg)
-    })?;
+            msg.push_str("\n\nRun `tsi engines` to see all available engines.");
+            anyhow::anyhow!(msg)
+        })?;
+        engines.push(engine.clone());
+    }
 
     // Build constraints
     let constraints = Constraints::new(
@@ -364,14 +370,22 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let problem = Problem::new(
         Mass::kg(args.payload),
         Velocity::mps(args.target_dv),
-        vec![engine.clone()],
+        engines.clone(),
         constraints,
     )
-    .with_stage_count(2); // Currently only supporting 2 stages
+    .with_stage_count(args.max_stages);
 
-    // Run optimizer
-    let optimizer = AnalyticalOptimizer;
-    let solution = optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?;
+    // Select optimizer
+    let solution = match select_optimizer(&args, &problem) {
+        SelectedOptimizer::Analytical => {
+            let optimizer = AnalyticalOptimizer;
+            optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+        SelectedOptimizer::BruteForce => {
+            let optimizer = BruteForceOptimizer::default();
+            optimizer.optimize(&problem).map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+    };
 
     // Output results
     match args.output {
@@ -384,6 +398,33 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Which optimizer to use.
+enum SelectedOptimizer {
+    Analytical,
+    BruteForce,
+}
+
+/// Select the appropriate optimizer based on user choice and problem complexity.
+fn select_optimizer(args: &OptimizeArgs, problem: &Problem) -> SelectedOptimizer {
+    match args.optimizer {
+        OptimizerChoice::Analytical => SelectedOptimizer::Analytical,
+        OptimizerChoice::BruteForce => SelectedOptimizer::BruteForce,
+        OptimizerChoice::Auto => {
+            // Auto-select based on problem complexity:
+            // - Single engine + 2 stages → Analytical (fast)
+            // - Multiple engines or != 2 stages → BruteForce
+            let is_simple = problem.is_single_engine()
+                && problem.stage_count == Some(2);
+
+            if is_simple {
+                SelectedOptimizer::Analytical
+            } else {
+                SelectedOptimizer::BruteForce
+            }
+        }
+    }
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
