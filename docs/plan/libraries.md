@@ -2,6 +2,8 @@
 
 A curated list of Rust crates that could expand `tsi`'s capabilities. Organized by what they'd enable.
 
+**Legend:** ✅ = In use, 📋 = Planned, ⏳ = Future
+
 ---
 
 ## Core Dependencies (v1.0)
@@ -10,36 +12,40 @@ These are the essentials — already planned for the initial release.
 
 ### CLI & Configuration
 
-| Crate | Purpose | Notes |
-|-------|---------|-------|
-| `clap` | Argument parsing | Derive macros, completions, excellent help generation |
-| `serde` | Serialization | JSON/TOML for config and output |
-| `toml` | Config files | Engine database format |
-| `anyhow` | Error handling | Convenient error propagation in binaries |
-| `thiserror` | Error types | Derive Error for library types |
+| Crate | Purpose | Status | Notes |
+|-------|---------|--------|-------|
+| `clap` | Argument parsing | ✅ v0.1 | Derive macros, completions, excellent help generation |
+| `serde` | Serialization | ✅ v0.1 | JSON/TOML for config and output |
+| `serde_json` | JSON output | ✅ v0.2 | Pretty-printed and machine-readable output |
+| `toml` | Config files | ✅ v0.2 | Engine database format |
+| `anyhow` | Error handling | ✅ v0.1 | Convenient error propagation in binaries |
+| `thiserror` | Error types | ✅ v0.1 | Derive Error for library types |
+| `num-format` | Number formatting | ✅ v0.2 | Thousands separators in output |
 
 ### Parallelism & Performance
 
-| Crate | Purpose | Notes |
-|-------|---------|-------|
-| `rayon` | Data parallelism | Trivial parallel iterators for Monte Carlo |
-| `rand` | Random numbers | Distributions for uncertainty analysis |
+| Crate | Purpose | Status | Notes |
+|-------|---------|--------|-------|
+| `rayon` | Data parallelism | ✅ v0.4 | Parallel brute-force search |
+| `rand` | Random numbers | 📋 v0.5 | Distributions for uncertainty analysis |
 
 ### Terminal Output
 
-| Crate | Purpose | Notes |
-|-------|---------|-------|
-| `ratatui` | Terminal UI | For future TUI mode |
-| `crossterm` | Terminal handling | Cross-platform terminal control |
-| `indicatif` | Progress bars | Nice spinners and progress indicators |
-| `comfy-table` | Tables | Engine listing output |
-| `owo-colors` | Colored output | Simple coloring with NO_COLOR support |
+| Crate | Purpose | Status | Notes |
+|-------|---------|--------|-------|
+| `ratatui` | Terminal UI | ⏳ | For future TUI mode |
+| `crossterm` | Terminal handling | ⏳ | Cross-platform terminal control |
+| `indicatif` | Progress bars | ⏳ | Nice spinners and progress indicators |
+| `comfy-table` | Tables | ✅ v0.2 | Engine listing output |
+| `owo-colors` | Colored output | ⏳ | Simple coloring with NO_COLOR support |
 
 ---
 
 ## Units & Dimensional Analysis
 
-Instead of rolling our own unit types, consider these battle-tested options.
+**Current approach:** Custom newtypes in `src/units/` (Mass, Velocity, Force, Time, Isp, Ratio). Simple, fast compile times, educational.
+
+Instead of rolling our own unit types, consider these battle-tested options for future migration.
 
 ### `uom` — Units of Measurement
 ```toml
@@ -304,13 +310,22 @@ Tiny inline charts: `▁▂▃▄▅▆▇█`
 
 ## Testing & Quality
 
-### `proptest` — Property-Based Testing
+| Crate | Purpose | Status | Notes |
+|-------|---------|--------|-------|
+| `proptest` | Property-based testing | ✅ v0.1 | Generates random inputs, 10 physics tests |
+| `assert_cmd` | CLI testing | ✅ v0.2 | Integration tests for commands, 37 tests |
+| `predicates` | Test assertions | ✅ v0.2 | String matching for CLI output |
+| `approx` | Float comparisons | ⏳ | Safe epsilon comparisons |
+| `criterion` | Benchmarking | ⏳ | Statistical benchmarks |
+| `insta` | Snapshot testing | ⏳ | CLI output regression testing |
+
+### `proptest` — Property-Based Testing ✅
 ```toml
 [dev-dependencies]
 proptest = "1.4"
 ```
 
-Already in testing.md. Generates random inputs to find edge cases.
+Generates random inputs to find edge cases. Currently used for physics invariants.
 
 ### `approx` — Float Comparisons
 ```toml
@@ -475,17 +490,20 @@ harness = false
 
 ## What to Use When
 
-### Phase 1-3 (Foundation through Two-Stage)
-Custom units, `clap`, `serde`, `toml`, `anyhow`, `thiserror`
+### Phase 1-3 (Foundation through Two-Stage) ✅ COMPLETE
+Custom units, `clap`, `serde`, `serde_json`, `toml`, `anyhow`, `thiserror`, `comfy-table`, `num-format`
 
-### Phase 4 (Multi-Engine)
-Add `rayon` for parallel search, `indicatif` for progress
+### Phase 4 (Multi-Engine) ✅ COMPLETE
+Added `rayon` for parallel search (custom stderr progress, not `indicatif`)
 
-### Phase 5 (Monte Carlo)
-Add `rand`, possibly `statrs` for distributions
+### Phase 5 (Monte Carlo) — NEXT
+Add `rand`, `rand_distr` for distributions
 
-### Phase 6+ (Trajectory Simulation)
+### Phase 6 (Polish)
+Consider `indicatif` for better progress bars, `owo-colors` for colored output
+
+### Phase 7+ (Trajectory Simulation)
 Add `ode_solvers`, `nalgebra`, consider `uom`
 
 ### Post-1.0 (Advanced Features)
-`nyx-space` (if AGPL ok), `genevo`, `plotters`
+`nyx-space` (if AGPL ok), `genevo`, `plotters`, `ratatui`
