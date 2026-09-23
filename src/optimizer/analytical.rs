@@ -84,9 +84,9 @@ const MAX_SWEEPS: usize = 40;
 ///
 /// # References
 ///
-/// - Curtis, H.D. *Orbital Mechanics for Engineering Students*, 3rd ed., §11.6
+/// - Curtis, H.D. *Orbital Mechanics for Engineering Students*, chapter 11,
 ///   "Optimal staging"
-/// - Sutton, G.P. and Biblarz, O. *Rocket Propulsion Elements*, 9th ed., §4.7
+/// - Sutton, G.P. and Biblarz, O. *Rocket Propulsion Elements*, chapter 4 ("Flight performance")
 ///
 /// Fast (milliseconds for typical problems) and exact to within numerical
 /// for the theory.

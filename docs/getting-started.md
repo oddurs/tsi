@@ -7,7 +7,7 @@
 ### From source (recommended)
 
 ```bash
-git clone https://github.com/yourusername/tsi.git
+git clone https://github.com/oddurs/tsi.git
 cd tsi
 cargo install --path .
 ```

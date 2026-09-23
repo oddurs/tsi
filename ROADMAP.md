@@ -24,12 +24,13 @@ and each one has to pass before the next begins:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.1.0 | 2026-01-14 | Type-safe units, Tsiolkovsky equation, `calculate` |
-| v0.2.0 | 2026-01-14 | Engine database (11 engines), `engines`, propellant types |
+| v0.1.0 | 2026-01-15 | Type-safe units, Tsiolkovsky equation, `calculate` |
+| v0.2.0 | 2026-01-15 | Engine database (11 engines), `engines`, propellant types |
 | v0.3.0 | 2026-01-15 | Two-stage analytical optimizer, `optimize`, JSON output |
 | v0.4.0 | 2026-01-15 | Multi-engine brute-force search, rayon, per-stage engines |
 | v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, confidence intervals |
 | v0.6.0 | 2026-01-16 | ASCII diagrams, completions, custom engines, loss estimates |
+| v0.7.0 | 2026-09-22 | Static fire: correct optimizer and Monte Carlo, ascent Isp, CI |
 
 The phase-by-phase plan that got tsi to v0.6 is archived in
 [docs/plan/roadmap-v0.md](docs/plan/roadmap-v0.md).
@@ -38,22 +39,15 @@ The phase-by-phase plan that got tsi to v0.6 is archived in
 
 ## v0.7 — Static fire
 
-`#########·` 88% · 15 of 17 done · due 2026-10-06
+`##########` 100% · 17 of 17 done · due 2026-10-06
 
 The engine lights on the test stand before anything is stacked on it.
-
-### planned
-
-- [ ] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
-
-### in progress
-
-- [ ] [`0008`](https://github.com/oddurs/tsi/blob/main/cairn/items/0008-make-the-delta-v-margin-explicit-defaulting-to-zero.md) Make the delta-v margin explicit, defaulting to zero <sup>feature · p0 · s · optimizer</sup>
 
 ### done
 
 - [x] [`0006`](https://github.com/oddurs/tsi/blob/main/cairn/items/0006-make-clippy-clean-across-all-targets.md) Make clippy clean across all targets <sup>chore · p0 · s · infra</sup>
 - [x] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
+- [x] [`0008`](https://github.com/oddurs/tsi/blob/main/cairn/items/0008-make-the-delta-v-margin-explicit-defaulting-to-zero.md) Make the delta-v margin explicit, defaulting to zero <sup>feature · p0 · s · optimizer</sup>
 - [x] [`0009`](https://github.com/oddurs/tsi/blob/main/cairn/items/0009-analytical-optimizer-is-11-heavier-than-brute-force.md) Analytical optimizer is 11% heavier than brute force <sup>bug · p0 · l · optimizer</sup>
 - [x] [`0010`](https://github.com/oddurs/tsi/blob/main/cairn/items/0010-stage-1-delta-v-uses-vacuum-isp.md) Stage 1 delta-v uses vacuum Isp <sup>bug · p0 · m · physics</sup>
 - [x] [`0011`](https://github.com/oddurs/tsi/blob/main/cairn/items/0011-monte-carlo-re-optimizes-each-sample-instead-of-stressing-one-design.md) Monte Carlo re-optimizes each sample instead of stressing one design <sup>bug · p0 · l · optimizer</sup>
@@ -66,6 +60,7 @@ The engine lights on the test stand before anything is stacked on it.
 - [x] [`0018`](https://github.com/oddurs/tsi/blob/main/cairn/items/0018-nan-and-infinite-inputs-pass-validation.md) NaN and infinite inputs pass validation <sup>bug · p1 · s · optimizer</sup>
 - [x] [`0019`](https://github.com/oddurs/tsi/blob/main/cairn/items/0019-property-tests-for-optimizer-invariants.md) Property tests for optimizer invariants <sup>chore · p0 · m · optimizer</sup>
 - [x] [`0020`](https://github.com/oddurs/tsi/blob/main/cairn/items/0020-optimizer-reproduces-falcon-9-and-saturn-v-staging.md) Optimizer reproduces Falcon 9 and Saturn V staging <sup>validation · p1 · m · physics</sup>
+- [x] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
 - [x] [`0022`](https://github.com/oddurs/tsi/blob/main/cairn/items/0022-three-doctests-are-marked-ignore.md) Three doctests are marked ignore <sup>bug · p2 · s · docs</sup>
 
 ## v0.8 — Stacking

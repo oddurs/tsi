@@ -497,7 +497,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Rocket staging optimizer"
 license = "MIT"
-repository = "https://github.com/yourusername/tsi"
+repository = "https://github.com/oddurs/tsi"
 keywords = ["rocket", "space", "aerospace", "optimization"]
 categories = ["command-line-utilities", "science", "simulation"]
 

@@ -89,7 +89,7 @@ Raptor-2         LOX/CH4         2,450 kN   2,256 kN     350s     327s      1,60
 Raptor-Vacuum    LOX/CH4         2,550 kN          -     380s        -      1,600 kg
 ```
 
-## Two-Stage Optimization
+## Staging Optimization
 
 ### Basic LEO Mission
 
@@ -97,38 +97,49 @@ Optimize a two-stage rocket to reach Low Earth Orbit (9,400 m/s):
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
-
 ═══════════════════════════════════════════════════════════════
   tsi — Staging Optimization Complete
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  205,430 kg
+  Solution:   2-stage    Total mass:  188,866 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 26,534 kg (LOX/CH4)                            │
-  │  Δv:         4,794 m/s                                      │
-  │  TWR (vac):  7.09                                           │
+  │  Propellant: 29,388 kg (LOX/CH4)                            │
+  │  Dry mass:   3,951 kg                                       │
+  │  Δv:         4,993 m/s                                      │
+  │  Burn time:  41.2s                                          │
+  │  TWR:        6.52 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×2)                                  │
-  │  Propellant: 154,605 kg (LOX/CH4)                           │
-  │  Δv:         4,794 m/s                                      │
-  │  TWR (vac):  2.43                                           │
+  │  Engine:     Raptor-2 (×1)                                  │
+  │  Propellant: 137,896 kg (LOX/CH4)                           │
+  │  Dry mass:   12,632 kg                                      │
+  │  Δv:         4,407 m/s                                      │
+  │  Burn time:  3m 13s                                         │
+  │  TWR:        1.22 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Total propellant:  181,139 kg
-  Total dry mass:    19,291 kg
-  Total burn time:   145s
+  Total propellant:  167,284 kg
+  Total dry mass:    16,583 kg
+  Total burn time:   234s
 
-  Payload fraction:  2.43%
-  Delta-v margin:    +188 m/s (2.0%)
+  Payload fraction:  2.65%
+  Delta-v margin:    +0 m/s (+0.0%)
+  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+
+  Optimizer: Analytical (181 configs)
 
 ═══════════════════════════════════════════════════════════════
 ```
+
+Textbook staging theory says identical stages should split delta-v equally.
+tsi gives the booster less: from sea level its Raptor averages 343 s rather
+than 350 s, and a single 1.6 t engine is a bigger burden on the small upper
+stage than on the booster.
 
 ### Higher Payload with Merlin Engines
 
@@ -136,41 +147,62 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 $ tsi optimize --payload 10000 --target-dv 9400 --engine merlin-1d
 ```
 
+### Let tsi Choose the Engines
+
+Offer several engines and up to three stages. Every engine is tried on every
+stage:
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,rl-10c --max-stages 3
+```
+
+The answer is a kerosene booster under two hydrogen stages. Hydrogen's 450 s
+wins in vacuum but can't lift off: the RL-10C has no sea-level rating at all.
+
+### Pin an Engine to a Stage
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --stage1-engine merlin-1d
+```
+
 ### Custom TWR Constraints
 
-Increase minimum liftoff TWR for more aggressive ascent:
+Increase minimum liftoff TWR for a more aggressive ascent:
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --min-twr 1.5
 ```
 
-### Mars Mission (Different Gravity)
+Compare `--show-losses` with and without it: a faster climb spends less
+delta-v fighting gravity.
 
-Display TWR values for Mars gravity (affects display only, not optimization):
-
-```bash
-$ tsi optimize --payload 500 --target-dv 5700 --engine raptor-2 --gravity mars
-```
-
-The output shows TWR adjusted for Mars gravity (3.72 m/s²). Note that the optimizer
-still requires TWR >= 1.0 for the calculation, but this shows what the effective
-TWR would be on Mars.
-
-### Sea-Level TWR Check
-
-Use sea-level thrust for first stage TWR (important for Earth launch):
+### Launch from Mars
 
 ```bash
-$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --sea-level
+$ tsi optimize --payload 5000 --target-dv 4500 --engine raptor-2 --gravity mars
 ```
 
-This shows TWR(SL) for the first stage instead of TWR(vac).
+Mars gravity is 38% of Earth's, so each engine lifts 2.6 times as much, and
+the thin atmosphere means the first stage gets full vacuum Isp. The same
+engine builds a much lighter rocket.
+
+### Design Margin and Monte Carlo
+
+tsi sizes rockets to hit the target exactly. Real hardware varies, so check
+how often the design would actually work, then add margin:
+
+```bash
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --monte-carlo 10000
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --margin 3 --monte-carlo 10000
+```
+
+The first reports about 50% success, the second nearly 100%.
 
 ### JSON Output for Scripting
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json | jq '.payload_fraction'
-0.024334...
+0.02647374083812189
 ```
 
 ## Real Rocket Approximations

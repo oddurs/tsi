@@ -59,7 +59,7 @@ cargo install tsi
 Or with Homebrew:
 
 ```bash
-brew install yourusername/tap/tsi
+brew install oddurs/tap/tsi
 ```
 
 ## Quick Start

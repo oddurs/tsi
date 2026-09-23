@@ -389,8 +389,8 @@ See [libraries.md](libraries.md) for a curated list of Rust crates that could ex
 - `serde`, `serde_json`, `toml` - Serialization for config and output
 - `anyhow`, `thiserror` - Error handling
 - `rayon` - Parallel brute-force search (added v0.4.0)
-- `comfy-table` - Engine listing tables
-- `num-format` - Thousands separators in output
+- `rand`, `rand_distr` - Monte Carlo sampling (added v0.5.0)
+- `clap_complete`, `clap_mangen` - Shell completions and man page (added v0.6.0)
 
 **Dev Dependencies:**
 - `assert_cmd`, `predicates` - CLI integration testing

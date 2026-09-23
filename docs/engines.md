@@ -80,9 +80,18 @@ tsi engines --verbose
 
 ## Adding Custom Engines
 
-Currently, `tsi` uses the embedded engine database. Custom engine support via `--engines-file` is planned for a future release.
+`tsi optimize` accepts engines defined inline, and they can be mixed with
+database engines:
 
-For now, you can use manual parameters:
+```bash
+tsi optimize --payload 5000 --target-dv 9400 \
+  --custom-engine "MyEngine:2500:360:1800:loxch4" --engine MyEngine,raptor-2
+```
+
+The format is `name:thrust_kn:isp_s:mass_kg:propellant`. Loading a whole
+engine file with `--engines-file` is planned (cairn item #40).
+
+For `tsi calculate`, use manual parameters:
 
 ```bash
 tsi calculate --isp 350 --thrust 2500000 --propellant-mass 100000

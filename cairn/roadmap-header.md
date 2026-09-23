@@ -22,12 +22,13 @@ and each one has to pass before the next begins:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.1.0 | 2026-01-14 | Type-safe units, Tsiolkovsky equation, `calculate` |
-| v0.2.0 | 2026-01-14 | Engine database (11 engines), `engines`, propellant types |
+| v0.1.0 | 2026-01-15 | Type-safe units, Tsiolkovsky equation, `calculate` |
+| v0.2.0 | 2026-01-15 | Engine database (11 engines), `engines`, propellant types |
 | v0.3.0 | 2026-01-15 | Two-stage analytical optimizer, `optimize`, JSON output |
 | v0.4.0 | 2026-01-15 | Multi-engine brute-force search, rayon, per-stage engines |
 | v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, confidence intervals |
 | v0.6.0 | 2026-01-16 | ASCII diagrams, completions, custom engines, loss estimates |
+| v0.7.0 | 2026-09-22 | Static fire: correct optimizer and Monte Carlo, ascent Isp, CI |
 
 The phase-by-phase plan that got tsi to v0.6 is archived in
 [docs/plan/roadmap-v0.md](docs/plan/roadmap-v0.md).

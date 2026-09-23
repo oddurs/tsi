@@ -20,7 +20,7 @@ These are the essentials — already planned for the initial release.
 | `toml` | Config files | ✅ v0.2 | Engine database format |
 | `anyhow` | Error handling | ✅ v0.1 | Convenient error propagation in binaries |
 | `thiserror` | Error types | ✅ v0.1 | Derive Error for library types |
-| `num-format` | Number formatting | ✅ v0.2 | Thousands separators in output |
+| `num-format` | Number formatting | ⏳ | Thousands separators are hand-rolled in `units/fmt.rs` today |
 
 ### Parallelism & Performance
 
@@ -37,7 +37,7 @@ These are the essentials — already planned for the initial release.
 | `ratatui` | Terminal UI | ⏳ | For future TUI mode |
 | `crossterm` | Terminal handling | ⏳ | Cross-platform terminal control |
 | `indicatif` | Progress bars | ⏳ | Nice spinners and progress indicators |
-| `comfy-table` | Tables | ✅ v0.2 | Engine listing output |
+| `comfy-table` | Tables | ⏳ | Engine listing is hand-formatted today |
 | `owo-colors` | Colored output | ⏳ | Simple coloring with NO_COLOR support |
 
 ---
@@ -492,7 +492,7 @@ harness = false
 ## What to Use When
 
 ### Phase 1-3 (Foundation through Two-Stage) ✅ COMPLETE
-Custom units, `clap`, `serde`, `serde_json`, `toml`, `anyhow`, `thiserror`, `comfy-table`, `num-format`
+Custom units, `clap`, `serde`, `serde_json`, `toml`, `anyhow`, `thiserror` (thousands separators and tables are hand-rolled)
 
 ### Phase 4 (Multi-Engine) ✅ COMPLETE
 Added `rayon` for parallel search (custom stderr progress, not `indicatif`)

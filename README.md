@@ -8,15 +8,17 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 
 ## Features
 
-- **Multi-engine optimization** - Find optimal staging with mixed engine types
-- **Monte Carlo uncertainty analysis** - Assess design robustness with statistical simulation
+- **Optimal staging** - Lagrange multiplier theory refined against real engine masses, any number of stages
+- **Multi-engine optimization** - Every engine is tried on every stage; pin engines to stages when you know better
+- **Monte Carlo uncertainty analysis** - Build your design a thousand times with manufacturing errors and see how often it still works
 - **Custom engine support** - Define inline engines for hypothetical analysis
 - **Atmospheric loss estimation** - Gravity drag and atmospheric drag approximations
 - **ASCII rocket diagrams** - Visual representation of rocket configurations
 - **Shell completions** - Bash, Zsh, and Fish auto-completion
-- **Automatic optimizer selection** - Fast analytical or exhaustive brute-force search
+- **Two independent optimizers** - Analytical, cross-checked by exhaustive brute-force search
 - **Stage performance calculations** - Delta-v, burn time, TWR
-- **Built-in engine database** - 11 real rocket engines with accurate specs
+- **Built-in engine database** - 11 real rocket engines
+- **Validated against real rockets** - Redesigns Falcon 9 to within 2%, and is honest about where ideal theory stops
 - **Type-safe physics** - Compile-time unit safety prevents calculation errors
 - **Scriptable output** - JSON and compact formats with optimization metadata
 
@@ -24,7 +26,7 @@ Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Ts
 
 ```bash
 # From source
-git clone https://github.com/yourusername/tsi.git
+git clone https://github.com/oddurs/tsi.git
 cd tsi
 cargo install --path .
 
@@ -76,32 +78,48 @@ BE-4             LOX/CH4           2,600 kN      340s      2,000 kg
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
-
 ═══════════════════════════════════════════════════════════════
   tsi — Staging Optimization Complete
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  205,430 kg
+  Solution:   2-stage    Total mass:  188,866 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 26,534 kg (LOX/CH4)                            │
-  │  Δv:         4,794 m/s                                      │
+  │  Propellant: 29,388 kg (LOX/CH4)                            │
+  │  Dry mass:   3,951 kg                                       │
+  │  Δv:         4,993 m/s                                      │
+  │  Burn time:  41.2s                                          │
+  │  TWR:        6.52 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×2)                                  │
-  │  Propellant: 154,605 kg (LOX/CH4)                           │
-  │  Δv:         4,794 m/s                                      │
+  │  Engine:     Raptor-2 (×1)                                  │
+  │  Propellant: 137,896 kg (LOX/CH4)                           │
+  │  Dry mass:   12,632 kg                                      │
+  │  Δv:         4,407 m/s                                      │
+  │  Burn time:  3m 13s                                         │
+  │  TWR:        1.22 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Payload fraction:  2.43%
-  Delta-v margin:    +188 m/s (2.0%)
+  Total propellant:  167,284 kg
+  Total dry mass:    16,583 kg
+  Total burn time:   234s
+
+  Payload fraction:  2.65%
+  Delta-v margin:    +0 m/s (+0.0%)
+  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+
+  Optimizer: Analytical (181 configs)
 
 ═══════════════════════════════════════════════════════════════
 ```
+
+The booster gets a little less delta-v than the upper stage: from sea level
+its Raptor delivers 343 s rather than 350 s, and its engine mass counts for
+less on a big stage. Ask for headroom with `--margin 2%`.
 
 ### Compact output for scripting
 
@@ -184,10 +202,15 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
      /  \
     /    \   <- Payload (5k kg)
    /______\
- |     S2     |  <- Stage 2: Raptor-2 x1
- |____________|
+ |            |  <- Stage 2: Raptor-2 x1
+ |     S2     |     29k kg
  |            |
- |     S1     |  <- Stage 1: Raptor-2 x2
+ |____________|
+ |            |  <- Stage 1: Raptor-2 x1
+ |            |     138k kg
+ |            |
+ |     S1     |
+ |            |
  |____________|
     \    /
      \  /
@@ -199,44 +222,56 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --show-losses
 
-  ESTIMATED LOSSES (Earth to LEO)
+  Gravity losses:     1,459 m/s
+  Drag losses:          212 m/s
+  Steering losses:      100 m/s
+  ──────────────────────────────
+  Total losses:       1,771 m/s
 
-  Gravity losses:       603 m/s
-  Drag losses:          183 m/s
-  Total losses:         886 m/s
-
-  After losses:       8,702 m/s (sufficient for LEO)
+  Ideal delta-v:      9,400 m/s
+  After losses:       7,629 m/s
+  LEO orbital v:      7,800 m/s
+  Shortfall:            171 m/s (insufficient)
 ```
+
+A liftoff TWR of 1.22 means a long, slow climb and heavy gravity losses. Try
+`--min-twr 1.4` and compare.
 
 ### Multi-engine optimization
 
 ```bash
-# Let the optimizer find the best engine combination
-$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2,merlin-1d
+# Every engine is tried on every stage: hydrogen ends up on top
+$ tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,rl-10c --max-stages 3
 
-# Force brute-force search for exhaustive exploration
+# Pin an engine to a stage
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --stage1-engine merlin-1d
+
+# Cross-check with exhaustive grid search
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --optimizer brute-force
 ```
 
 ### Monte Carlo uncertainty analysis
 
+Real engines come off the line a percent or so off their rated Isp, and
+structures come out heavier or lighter than drawn. `--monte-carlo` builds
+your design many times with those errors. A design with no margin works about
+half the time, so give it some:
+
 ```bash
-# Run 1000 iterations with default uncertainty (ISP ±1%, thrust ±2%, structural ±5%)
-$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --monte-carlo 1000
+$ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
+    --margin 3 --monte-carlo 1000 --seed 1
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  MONTE CARLO ANALYSIS                                       │
-  └─────────────────────────────────────────────────────────────┘
-
-  Success probability:  98.2% (HIGH CONFIDENCE)
-  Iterations:           1000 (0 failed)
+  Design stressed:      2-stage, 220,098 kg (the solution above)
+  Success probability:  100.0% (HIGH CONFIDENCE)
+  Builds:               1000 (0 too heavy to lift off)
+  Seed:                 1 (repeat with --seed 1)
 
   Confidence Intervals:
-    5th %ile:     9,312 m/s  (worst case)
-    50th %ile:    9,588 m/s  (median)
-    95th %ile:    9,864 m/s  (best case)
+    5th %ile:     9,541 m/s  (worst case)
+    50th %ile:    9,680 m/s  (median)
+    95th %ile:    9,831 m/s  (best case)
 
-# Use higher uncertainty for development engines
+# Higher uncertainty for development engines
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
     --monte-carlo 1000 --uncertainty high
 
@@ -261,7 +296,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
 - [x] v0.4 - Multi-engine optimization with brute-force search
 - [x] v0.5 - Monte Carlo uncertainty analysis
 - [x] v0.6 - Polish (ASCII diagrams, shell completions, custom engines)
-- [ ] v0.7 - Static fire (optimizer correctness, CI)
+- [x] v0.7 - Static fire (optimizer correctness, CI)
 - [ ] v0.8 - Stacking (library-first API)
 - [ ] v0.9 - Wet dress (`--explain`, mission targets, real vehicles)
 - [ ] v1.0 - Liftoff (API freeze, crates.io)

@@ -157,17 +157,42 @@ Staging lets you discard empty mass, dramatically improving overall performance.
 
 ### Optimal Staging
 
-For stages with the same Isp and structural ratio, optimal performance comes from equal delta-v contribution per stage:
+For stages with the same Isp and structural ratio, and nothing else to
+account for, optimal performance comes from an equal delta-v contribution per
+stage:
 
 ```
 Δv_per_stage = Δv_total / n_stages
 ```
 
-This is the basis for analytical staging optimization.
+That is the classical result, from a Lagrange multiplier solution of the
+staging problem (Curtis, *Orbital Mechanics for Engineering Students*, chapter 11, "Optimal staging").
+Real stages break two of its assumptions:
+
+- **Engines have fixed mass.** A 1.6 t Raptor weighs the same on a 30 t upper
+  stage as on a 150 t booster, but it is a much bigger fraction of the small
+  one. The optimum moves delta-v toward the stage that carries its engines best.
+- **The first stage flies through air.** Back-pressure on the nozzle lowers Isp
+  at low altitude. Averaged over a typical climb, a Merlin-1D delivers about
+  302 s rather than its vacuum 311 s. tsi evaluates first stages at the mean
+  pressure ratio of a nominal ascent (0.3 of sea level) and upper stages in vacuum.
+
+`tsi optimize` starts from the classical solution and refines it with both
+effects included. For a Raptor-2 rocket carrying 5 t to 9,400 m/s, the booster
+ends up with about 4,400 m/s and the upper stage 5,000 m/s.
+
+### Where the first stage must hand over
+
+An upper stage modelled with vacuum Isp has to light above the atmosphere.
+tsi requires an Earth-launched first stage with a stage above it to deliver
+at least 2,000 m/s of ideal delta-v. Real boosters deliver 2.5-4.5 km/s. Without
+this rule the optimizer finds a loophole: a "first stage" that is all engines
+and no propellant, supplying liftoff thrust while a high-Isp upper stage does
+all the work from sea level.
 
 ## Limitations
 
-`tsi` uses ideal rocket equation calculations. Real rockets face additional losses:
+`tsi` optimizes ideal delta-v. Real rockets face additional losses:
 
 | Loss | Typical Magnitude |
 |------|------------------|
@@ -175,10 +200,17 @@ This is the basis for analytical staging optimization.
 | Atmospheric drag | 100-400 m/s |
 | Steering losses | 50-150 m/s |
 
-These losses are not currently modeled in `tsi`. The calculated delta-v represents the theoretical maximum; actual orbital insertion requires 15-20% more.
+`--show-losses` estimates these with empirical models, but the optimizer
+doesn't yet account for them. That matters most for low-thrust upper stages:
+a hydrogen stage with TWR 0.5 spends minutes fighting gravity, which ideal
+theory doesn't charge it for. Asked to do Saturn V's job with its engines,
+tsi designs a rocket about 30% lighter than the real one, because it leans on
+the J-2 hydrogen stages harder than von Braun's team could afford to. Budget
+15-20% more delta-v than the ideal figure for orbital insertion.
 
 ## References
 
 - Sutton, G.P. & Biblarz, O. (2016). *Rocket Propulsion Elements*
 - Turner, M.J.L. (2009). *Rocket and Spacecraft Propulsion*
+- Curtis, H.D. *Orbital Mechanics for Engineering Students*, chapter 11 ("Optimal staging")
 - NASA SP-8012: *Staging Optimization*

@@ -216,7 +216,7 @@ pub struct OptimizeArgs {
     #[arg(long, value_enum, default_value = "earth")]
     pub gravity: Gravity,
 
-    /// Optimizer algorithm (auto-selects if not specified)
+    /// Optimizer algorithm
     #[arg(long, value_enum, default_value = "auto")]
     pub optimizer: OptimizerChoice,
 
@@ -276,12 +276,12 @@ pub enum UncertaintyLevel {
 /// Optimizer algorithm to use.
 #[derive(Clone, Copy, ValueEnum, Default)]
 pub enum OptimizerChoice {
-    /// Auto-select based on problem complexity (default)
+    /// Pick the best optimizer for the problem (currently always analytical)
     #[default]
     Auto,
-    /// Analytical optimizer (fast, 2-stage single-engine only)
+    /// Lagrange staging solution refined numerically (fast, exact)
     Analytical,
-    /// Brute force grid search (slower, handles any configuration)
+    /// Exhaustive grid search (slower; an independent cross-check)
     BruteForce,
 }
 

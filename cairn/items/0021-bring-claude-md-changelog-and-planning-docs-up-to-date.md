@@ -2,10 +2,12 @@
 id: 21
 title: Bring CLAUDE.md, CHANGELOG and planning docs up to date
 type: docs
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p1
 effort: m
 area: docs
@@ -21,7 +23,11 @@ Stale today:
 
 ## Acceptance criteria
 
-- [ ] CHANGELOG backfilled for 0.4.0-0.6.0 with correct dates
-- [ ] `v0.4.0` tag on commit `38fdafe`
-- [ ] CLAUDE.md describes the current state and points at cairn for the roadmap
-- [ ] No stale dependency or flag references remain
+- [x] CHANGELOG backfilled for 0.4.0-0.6.0 with correct dates
+- [x] `v0.4.0` tag on commit `38fdafe`
+- [x] CLAUDE.md describes the current state and points at cairn for the roadmap
+- [x] No stale dependency or flag references remain
+
+## 2026-09-22
+
+Also rewrote the stale optimize sections of README, docs/commands.md and docs/examples.md from real output (they described v0.3 behaviour and missed v0.4-v0.6 flags), corrected the documented exit codes to match reality (1 for errors including infeasible, 2 for usage), fixed the --optimizer help text, and moved the physics guide's staging section onto the new model. Release dates corrected from git: v0.1.0 and v0.2.0 are 2026-01-15. Tagged v0.4.0 locally on 38fdafe (not pushed).

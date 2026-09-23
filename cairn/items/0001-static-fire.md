@@ -3,7 +3,7 @@ id: 1
 key: v0.7
 title: Static fire
 type: milestone
-status: planned
+status: done
 created: 2026-09-22
 updated: 2026-09-22
 priority: p2

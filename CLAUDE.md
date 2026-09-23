@@ -6,48 +6,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `tsi` (Tsiolkovsky) is a Rust CLI tool for rocket staging optimization. Given payload mass, target delta-v, and available engines, it finds optimal staging configurations that maximize payload fraction or minimize total mass.
 
-**Current Status:** Phase 3 complete (v0.3.0). Working CLI with engine database, two-stage optimization, and comprehensive test suite (168 tests).
+**Current Status:** v0.7.0 (Static fire). Working CLI with engine database, N-stage multi-engine optimization cross-checked by two independent optimizers, Monte Carlo analysis of fixed designs, and validation against real vehicles. MSRV is Rust 1.87; CI runs on Linux, macOS and Windows.
 
 ## Build Commands
-
-Once the Cargo project is initialized:
 
 ```bash
 cargo build              # Compile
 cargo test               # Run all tests
 cargo test <name>        # Run specific test
 cargo test --lib         # Run only unit tests
-cargo clippy             # Lint
+cargo clippy --all-targets -- -D warnings   # Lint (CI denies warnings)
 cargo fmt                # Format code
 cargo run -- <cmd>       # Run CLI (e.g., cargo run -- optimize --help)
-cargo bench              # Run benchmarks
+cairn check              # Validate the roadmap (CI runs this too)
 ```
 
 ## Architecture
 
-The tool is designed as a Rust library + CLI application:
+The tool is a Rust library + CLI application:
 
 ### Module Structure
 - **units/** - Type-safe newtypes for physical quantities (Mass, Velocity, Force, Time, Isp, Ratio). Prevents unit errors at compile time.
-- **engine/** - Engine struct, Propellant enum, TOML database loading (~10 real engines: Merlin-1D, Raptor-2, RS-25, RL-10C, etc.)
-- **stage/** - Stage (single stage) and Rocket (multi-stage assembly) types
-- **physics/** - Tsiolkovsky equation (`Δv = Isp × g₀ × ln(mass_ratio)`), TWR, burn time calculations
-- **optimizer/** - Optimizer trait with implementations: AnalyticalOptimizer (closed-form 2-stage), BruteForceOptimizer (grid search), MonteCarloRunner (uncertainty via rayon parallelism)
-- **cli/** - clap-based argument parsing with three subcommands: `calculate`, `optimize`, `engines`
-- **output/** - Terminal (box-drawing), JSON, and ASCII diagram formatters
+- **engine/** - Engine struct, Propellant enum, TOML database loading (11 real engines: Merlin-1D, Raptor-2, RS-25, RL-10C, etc.)
+- **stage/** - Stage (single stage) and Rocket (multi-stage assembly) types. `Rocket` evaluates its first stage with an `IspModel` (ascent-averaged by default).
+- **physics/** - Tsiolkovsky equation, TWR, burn time, `IspModel` (why Isp depends on altitude), empirical loss estimates
+- **optimizer/** - `Problem`/`Constraints`, the `Optimizer` trait, `AnalyticalOptimizer` (Lagrange staging solution refined numerically; any stage count, any engine mix), `BruteForceOptimizer` (streaming grid search, used as an independent cross-check), `MonteCarloRunner` (stresses a fixed design; seeded). `sizing.rs` holds the shared top-down stage sizing and the closed-form minimum engine count.
+- **cli/** - clap-based argument parsing: `calculate`, `optimize`, `engines`, `completions`
+- **output/** - Terminal (box-drawing) and ASCII diagram formatters
 
 ### Key Design Decisions
 - Newtype pattern for all physical units (compiler prevents adding kg to m/s)
 - Engine data embedded via `include_str!` for single-binary distribution
-- Property-based testing with proptest for physics invariants
-- Validation tests against real rockets (Saturn V, Falcon 9, Space Shuttle)
+- No hidden margins: rockets are sized to hit the target exactly; margin is an explicit constraint
+- Comparisons that validate input are written so NaN fails them (`!(x > 0.0)` style, or `is_nan() ||`)
+- Property-based testing with proptest for physics and optimizer invariants
+- Validation tests against real rockets, honest about where ideal theory stops (see the Saturn V test)
 
-### Test Suite (168 tests)
-- **117 unit tests** - Inline in source modules
-- **31 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
-- **10 property tests** - Invariants via proptest (`tests/properties.rs`)
-- **10 validation tests** - Real rocket comparisons (`tests/validation.rs`)
-- **21 doc tests** - Examples in rustdoc comments
+### Test Suite (308 tests)
+- **173 unit tests** - Inline in source modules
+- **69 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
+- **16 property tests** - Invariants via proptest (`tests/properties.rs`), including analytical vs brute force
+- **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
+- **32 doc tests** - Examples in rustdoc comments (none ignored)
 
 ## Development Roadmap
 
@@ -64,19 +64,22 @@ The v0.1-v0.6 phase plan is archived at `docs/plan/roadmap-v0.md`.
 
 ## Key Files
 
-- `docs/architecture.md` - Technical design with module structure and type definitions
-- `docs/testing.md` - Test categories, example tests, CI configuration
-- `docs/interface.md` - CLI UX design, output formats, error handling patterns
-- `docs/concept.md` - Project vision, target users, design principles
+- `docs/plan/architecture.md` - Technical design with module structure and type definitions
+- `docs/plan/testing.md` - Test categories, example tests, CI configuration
+- `docs/plan/interface.md` - CLI UX design, output formats, error handling patterns
+- `docs/plan/concept.md` - Project vision, target users, design principles
+- `docs/commands.md`, `docs/physics.md` - User-facing command reference and physics guide
+- `CHANGELOG.md` - Keep a Changelog format; update it with every user-visible change
 
 ## Physics Reference
 
 Core equation: `Δv = Isp × g₀ × ln(m_wet / m_dry)` where g₀ = 9.80665 m/s²
 
 Validation targets:
-- Falcon 9 S1: ~8500 m/s ideal delta-v
-- Falcon 9 S2: ~11000 m/s ideal delta-v
-- Saturn V S-IC: ~7500 m/s ideal delta-v
+- Falcon 9 S1: ~8,700 m/s isolated ideal delta-v (ascent-averaged Isp ~302 s)
+- Falcon 9 stacked (S1 + S2 with 22.8 t payload): ~9,300 m/s
+- Optimizer redesign of Falcon 9: within 5% of the real 571.5 t
+- Saturn V S-IC: ~7,500-8,500 m/s isolated ideal delta-v
 
 ## User Preferences
 

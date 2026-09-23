@@ -1,11 +1,11 @@
 [package]
 name = "tsi"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.87"
 description = "Rocket staging optimizer"
 license = "MIT"
-repository = "https://github.com/yourusername/tsi"
+repository = "https://github.com/oddurs/tsi"
 keywords = ["rocket", "space", "aerospace", "optimization"]
 categories = ["command-line-utilities", "science", "simulation"]
 

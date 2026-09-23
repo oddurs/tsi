@@ -144,81 +144,123 @@ tsi engines --propellant kerosene --verbose
 
 ## tsi optimize
 
-Optimize a two-stage rocket configuration to meet a delta-v target.
+Find the lightest rocket that delivers a payload with a given delta-v.
 
 ### Usage
 
 ```bash
-tsi optimize [OPTIONS] --payload <KG> --target-dv <M/S> --engine <NAME>
+tsi optimize [OPTIONS] --payload <KG> --target-dv <M/S> --engine <NAMES>
 ```
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--payload <KG>` | Payload mass in kg (required) |
-| `--target-dv <M/S>` | Target delta-v in m/s (required) |
-| `--engine <NAME>` | Engine name from database (required) |
-| `--min-twr <RATIO>` | Minimum first stage TWR [default: 1.2] |
-| `--min-upper-twr <RATIO>` | Minimum upper stage TWR [default: 0.5] |
-| `--max-stages <N>` | Maximum number of stages [default: 2] |
+| `-p, --payload <KG>` | Payload mass in kg (required) |
+| `-d, --target-dv <M/S>` | Target delta-v in m/s (required) |
+| `-e, --engine <NAMES>` | Engines to choose from, comma-separated (required) |
+| `--stage1-engine <NAME>` | Use this engine on the first stage |
+| `--stage2-engine <NAME>` | Use this engine on the second stage |
+| `--min-twr <RATIO>` | Minimum liftoff TWR [default: 1.2] |
+| `--min-upper-twr <RATIO>` | Minimum upper-stage TWR at ignition [default: 0.5] |
+| `--max-stages <N>` | Try every stage count from 1 to N [default: 2] |
+| `--stages <N>` | Use exactly N stages |
+| `--max-engines <N>` | Most engines on any one stage [default: 9] |
 | `--structural-ratio <R>` | Structural mass / propellant mass [default: 0.08] |
-| `--sea-level` | Use sea-level thrust/ISP for first stage TWR display |
-| `--gravity <BODY>` | Surface gravity for TWR display: earth, mars, moon [default: earth] |
-| `-o, --output <FORMAT>` | Output format: pretty, json [default: pretty] |
+| `--margin <PERCENT>` | Extra delta-v to design for, e.g. `2` or `2%` [default: 0] |
+| `--gravity <BODY>` | Launch body: earth, mars, moon [default: earth] |
+| `--optimizer <NAME>` | auto, analytical, brute-force [default: auto] |
+| `--monte-carlo <N>` | Build the design N times with manufacturing errors |
+| `--uncertainty <LEVEL>` | Monte Carlo error level: none, low, default, high |
+| `--seed <N>` | Monte Carlo seed, for repeatable runs |
+| `--diagram` | Draw the rocket |
+| `--show-losses` | Estimate gravity and drag losses |
+| `--custom-engine <SPEC>` | Define an engine inline: `name:thrust_kn:isp_s:mass_kg:propellant` |
+| `--quiet` | Hide progress output |
+| `-o, --output <FORMAT>` | pretty, json [default: pretty] |
 
-### Algorithm
+### How it works
 
-The optimizer uses an analytical solution based on optimal staging theory:
+The analytical optimizer starts from the classical Lagrange multiplier
+solution to the staging problem, which says identical stages should split
+delta-v equally. It then refines the split against the exact mass model.
+Engines have fixed mass, and an Earth-launched first stage has lower
+effective Isp than it would in vacuum, so the real optimum usually puts more
+delta-v on the upper stage. Each stage gets the fewest engines that meet its
+TWR limit.
 
-1. **Equal delta-v split** - For identical engines, optimal staging splits delta-v equally between stages
-2. **Iterative engine count** - Determines minimum engines per stage to meet TWR constraints
-3. **2% margin** - Adds 2% to target delta-v for robustness
+Every engine is tried on every stage, and with `--max-stages` every stage count
+up to the maximum, so asking for `--engine merlin-1d,rl-10c` finds that the
+hydrogen engine belongs on top.
+
+A few physical rules apply:
+
+- **Booster Isp.** An Earth launch's first stage uses Isp averaged over its
+  climb through the atmosphere (302 s for a Merlin-1D, against 311 s in
+  vacuum). Upper stages use vacuum Isp. On Mars and the Moon every stage uses
+  vacuum Isp.
+- **Liftoff TWR** uses sea-level thrust and the launch body's gravity.
+- **First-stage floor.** On Earth, a first stage with a stage above it must
+  deliver at least 2,000 m/s, enough to carry the upper stage above nearly all
+  of the atmosphere before it lights.
+- **No hidden margin.** The rocket is sized to hit the target exactly. Use
+  `--margin` for headroom, and `--monte-carlo` to see how much you need.
+
+`--optimizer brute-force` runs an exhaustive grid search instead. It is slower
+and slightly less precise, and it shares none of the analytical optimizer's
+search logic, which makes it a useful cross-check.
 
 ### Examples
 
 ```bash
-# Basic two-stage rocket to LEO (9,400 m/s)
+# Two-stage methane rocket to LEO (9,400 m/s)
 tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 
-# Higher payload with custom TWR constraint
-tsi optimize --payload 10000 --target-dv 9400 --engine raptor-2 --min-twr 1.3
+# Let tsi choose engines per stage, and up to three stages
+tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,rl-10c,raptor-2 --max-stages 3
 
-# Using Merlin-1D for Falcon 9-style vehicle
-tsi optimize --payload 10000 --target-dv 8000 --engine merlin-1d
+# Kerosene booster, methane upper stage
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --stage1-engine merlin-1d
 
-# Sea-level TWR for first stage (important for Earth launch)
-tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --sea-level
+# A Super Heavy class booster needs more than nine engines
+tsi optimize --payload 100000 --target-dv 9400 --engine raptor-2 --max-engines 40
 
-# Show TWR adjusted for Mars gravity
-tsi optimize --payload 5000 --target-dv 5700 --engine raptor-2 --gravity mars
+# Design in 3% margin and check it with Monte Carlo
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --margin 3 --monte-carlo 10000
 
-# JSON output for scripting
+# Launch from Mars
+tsi optimize --payload 5000 --target-dv 4500 --engine raptor-2 --gravity mars
+
+# JSON for scripting
 tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
 ```
 
-### Output Fields
+### Output
 
-**Pretty output includes:**
-- Target and achieved delta-v
-- Total rocket mass
-- Stage-by-stage breakdown with:
-  - Engine name and count
-  - Propellant mass and type
-  - Dry mass
-  - Stage delta-v
-  - Burn time
-  - TWR at ignition
-- Payload fraction
-- Delta-v margin (m/s and %)
+**Pretty output** shows each stage's engines, propellant, dry mass, delta-v,
+burn time and TWR (at liftoff for stage 1, at ignition above it), then totals,
+payload fraction, margin, and the booster Isp that was used.
 
-**JSON output includes:**
-- `target_delta_v_mps` - Target delta-v
-- `total_mass_kg` - Total rocket mass
-- `total_delta_v_mps` - Achieved delta-v
-- `payload_fraction` - Payload / total mass
-- `margin_mps` - Delta-v margin
-- `stages[]` - Array of stage details
+**JSON output** fields:
+
+- `target_delta_v_mps`, `total_delta_v_mps`, `payload_kg`, `total_mass_kg`
+- `payload_fraction`, `margin_mps`, `margin_percent`, `design_margin_percent`
+- `booster_isp_model`: `ascent-averaged` or `vacuum`
+- `stages[]`: `engine`, `engine_count`, `propellant_kg`, `dry_mass_kg`,
+  `wet_mass_kg`, `delta_v_mps`, `isp_s`, `burn_time_s`, `twr_ignition`, and
+  `twr_liftoff` on stage 1
+- `metadata`: `optimizer`, `iterations`, `runtime_ms`
+- `monte_carlo` (with `--monte-carlo`): success probability, delta-v and mass
+  distributions, required margin for 95% confidence, `seed`, and the mass and
+  stage count of the design that was stressed
+
+### Monte Carlo
+
+`--monte-carlo N` builds the optimized design N times. Each time, every stage
+gets random errors in Isp, thrust and structural mass, and tsi counts how many
+builds still reach the target. A design with no margin succeeds about half
+the time, because half of all builds come out below nominal. The output says
+how much margin 95% confidence needs, and the seed to repeat the run.
 
 ### Example Output
 
@@ -228,29 +270,36 @@ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  205,430 kg
+  Solution:   2-stage    Total mass:  188,866 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 26,534 kg (LOX/CH4)                            │
-  │  Dry mass:   3,723 kg                                       │
-  │  Δv:         4,794 m/s                                      │
-  │  Burn time:  37.2s                                          │
-  │  TWR:        7.09                                           │
+  │  Propellant: 29,388 kg (LOX/CH4)                            │
+  │  Dry mass:   3,951 kg                                       │
+  │  Δv:         4,993 m/s                                      │
+  │  Burn time:  41.2s                                          │
+  │  TWR:        6.52 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×2)                                  │
-  │  Propellant: 154,605 kg (LOX/CH4)                           │
-  │  Dry mass:   15,568 kg                                      │
-  │  Δv:         4,794 m/s                                      │
-  │  Burn time:  1m 48s                                         │
-  │  TWR:        2.43                                           │
+  │  Engine:     Raptor-2 (×1)                                  │
+  │  Propellant: 137,896 kg (LOX/CH4)                           │
+  │  Dry mass:   12,632 kg                                      │
+  │  Δv:         4,407 m/s                                      │
+  │  Burn time:  3m 13s                                         │
+  │  TWR:        1.22 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Payload fraction:  2.43%
-  Delta-v margin:    +188 m/s (2.0%)
+  Total propellant:  167,284 kg
+  Total dry mass:    16,583 kg
+  Total burn time:   234s
+
+  Payload fraction:  2.65%
+  Delta-v margin:    +0 m/s (+0.0%)
+  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+
+  Optimizer: Analytical (181 configs)
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -292,5 +341,5 @@ Error: Invalid arguments:
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | User error (bad arguments, unknown engine) |
-| 2 | No solution (infeasible problem) |
+| 1 | Error: invalid values, unknown engine, or no feasible rocket |
+| 2 | Usage error: unknown or missing flags (reported by the argument parser) |
