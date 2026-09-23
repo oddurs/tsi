@@ -54,9 +54,9 @@ echo "ship: $url (auto-merge queued)"
 if [ "$wait" = 1 ]; then
   # Checks appear once CI's runners pick the run up; that can take minutes
   for _ in $(seq 300); do
-    gh pr checks --required 2>&1 | grep -q "no .*checks reported" || break
+    gh pr checks 2>&1 | grep -q "no .*checks reported" || break
     sleep 2
   done
-  gh pr checks --watch --fail-fast --required || { echo "ship: CI failed; fix, commit, and run ship again" >&2; exit 1; }
+  gh pr checks --watch --fail-fast --interval 15 || { echo "ship: CI failed; fix, commit, and run ship again" >&2; exit 1; }
   echo "ship: CI green; merging"
 fi
