@@ -343,7 +343,7 @@ mod tests {
         );
 
         // All values should be clamped to valid range
-        assert!(samples.iter().all(|&x| x >= 0.01 && x <= 0.5));
+        assert!(samples.iter().all(|x| (0.01..=0.5).contains(x)));
     }
 
     #[test]

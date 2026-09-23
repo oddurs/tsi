@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn ratio_display() {
-        let r = Ratio::new(3.14159);
-        assert_eq!(format!("{}", r), "3.142");
+        let r = Ratio::new(1.23456);
+        assert_eq!(format!("{}", r), "1.235");
     }
 }

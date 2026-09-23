@@ -38,13 +38,12 @@ The phase-by-phase plan that got tsi to v0.6 is archived in
 
 ## v0.7 — Static fire
 
-`··········` 0% · 0 of 17 done · due 2026-10-06
+`#·········` 6% · 1 of 17 done · due 2026-10-06
 
 The engine lights on the test stand before anything is stacked on it.
 
 ### planned
 
-- [ ] [`0006`](https://github.com/oddurs/tsi/blob/main/cairn/items/0006-make-clippy-clean-across-all-targets.md) Make clippy clean across all targets <sup>chore · p0 · s · infra</sup>
 - [ ] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
 - [ ] [`0008`](https://github.com/oddurs/tsi/blob/main/cairn/items/0008-make-the-delta-v-margin-explicit-defaulting-to-zero.md) Make the delta-v margin explicit, defaulting to zero <sup>feature · p0 · s · optimizer</sup>
 - [ ] [`0009`](https://github.com/oddurs/tsi/blob/main/cairn/items/0009-analytical-optimizer-is-11-heavier-than-brute-force.md) Analytical optimizer is 11% heavier than brute force <sup>bug · p0 · l · optimizer</sup>
@@ -61,6 +60,10 @@ The engine lights on the test stand before anything is stacked on it.
 - [ ] [`0020`](https://github.com/oddurs/tsi/blob/main/cairn/items/0020-optimizer-reproduces-falcon-9-and-saturn-v-staging.md) Optimizer reproduces Falcon 9 and Saturn V staging <sup>validation · p1 · m · physics</sup>
 - [ ] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
 - [ ] [`0022`](https://github.com/oddurs/tsi/blob/main/cairn/items/0022-three-doctests-are-marked-ignore.md) Three doctests are marked ignore <sup>bug · p2 · s · docs</sup>
+
+### done
+
+- [x] [`0006`](https://github.com/oddurs/tsi/blob/main/cairn/items/0006-make-clippy-clean-across-all-targets.md) Make clippy clean across all targets <sup>chore · p0 · s · infra</sup>
 
 ## v0.8 — Stacking
 

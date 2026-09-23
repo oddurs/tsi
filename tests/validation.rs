@@ -344,7 +344,7 @@ fn optimizer_meets_target_with_margin() {
     // Margin should be reasonable (1-5%)
     let margin_percent = margin / target * 100.0;
     assert!(
-        margin_percent >= 1.0 && margin_percent <= 5.0,
+        (1.0..=5.0).contains(&margin_percent),
         "Margin outside expected range: {:.1}%",
         margin_percent
     );
@@ -405,7 +405,7 @@ fn optimizer_reasonable_payload_fraction() {
 
     // Payload fraction should be in realistic range for LEO
     assert!(
-        pf >= 1.5 && pf <= 5.0,
+        (1.5..=5.0).contains(&pf),
         "Payload fraction unrealistic: {:.2}%",
         pf
     );

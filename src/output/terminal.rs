@@ -515,12 +515,8 @@ pub fn print_losses(estimate: &LossEstimate, total_dv: f64) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn box_width_is_reasonable() {
-        // Box should be wide enough for typical content
-        assert!(BOX_WIDTH >= 50);
-        assert!(BOX_WIDTH <= 80);
-    }
+    // Box must be wide enough for typical content but fit an 80-column terminal.
+    const _: () = assert!(BOX_WIDTH >= 50 && BOX_WIDTH <= 80);
 
     #[test]
     fn histogram_handles_empty() {
