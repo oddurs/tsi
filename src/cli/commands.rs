@@ -522,7 +522,7 @@ fn select_optimizer(args: &OptimizeArgs) -> SelectedOptimizer {
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
-    terminal::print_solution_with_options(solution, args.gravity.as_mps2(), args.margin);
+    terminal::print_solution_with_options(solution, args.margin);
 }
 
 fn print_solution_json(
@@ -533,7 +533,6 @@ fn print_solution_json(
     let rocket = &solution.rocket;
     let stages = rocket.stages();
 
-    let gravity = args.gravity.as_mps2();
     let stages_json: Vec<_> = stages
         .iter()
         .enumerate()
@@ -550,11 +549,11 @@ fn print_solution_json(
                 "burn_time_s": stage.burn_time().as_seconds(),
                 // Vacuum thrust over the whole stack above and including
                 // this stage, at the moment it ignites
-                "twr_ignition": rocket.stage_twr_in(i, gravity).as_f64(),
+                "twr_ignition": rocket.stage_twr(i).as_f64(),
             });
             if i == 0 {
                 // What gets the rocket off the pad
-                json["twr_liftoff"] = serde_json::json!(rocket.liftoff_twr_in(gravity).as_f64());
+                json["twr_liftoff"] = serde_json::json!(rocket.liftoff_twr().as_f64());
             }
             json
         })

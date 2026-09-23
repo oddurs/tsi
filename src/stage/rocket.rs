@@ -90,6 +90,8 @@ pub struct Rocket {
     payload: Mass,
     /// How the first stage's Isp is evaluated
     booster_isp: IspModel,
+    /// Surface gravity of the launch body (m/s²), for TWR
+    surface_gravity: f64,
 }
 
 impl Rocket {
@@ -109,7 +111,24 @@ impl Rocket {
             stages,
             payload,
             booster_isp: IspModel::AscentAveraged,
+            surface_gravity: G0,
         }
+    }
+
+    /// Set the launch body's surface gravity in m/s² (default: g₀).
+    ///
+    /// [`liftoff_twr`](Self::liftoff_twr) and [`stage_twr`](Self::stage_twr)
+    /// are quoted against it. The optimizers set it from
+    /// [`Constraints::surface_gravity`](crate::optimizer::Constraints::surface_gravity),
+    /// so a rocket sized for Mars reports its Mars TWR.
+    pub fn with_surface_gravity(mut self, gravity: f64) -> Self {
+        self.surface_gravity = gravity;
+        self
+    }
+
+    /// The launch body's surface gravity in m/s².
+    pub fn surface_gravity(&self) -> f64 {
+        self.surface_gravity
     }
 
     /// Set how the first stage's Isp is evaluated (default: ascent-averaged).
@@ -226,8 +245,10 @@ impl Rocket {
     ///
     /// Must be > 1.0 for the rocket to leave the pad.
     /// Typical values: 1.2 - 1.5 for safety margin.
+    ///
+    /// Quoted against the rocket's own [`surface_gravity`](Self::surface_gravity).
     pub fn liftoff_twr(&self) -> Ratio {
-        self.liftoff_twr_in(G0)
+        self.liftoff_twr_in(self.surface_gravity)
     }
 
     /// Liftoff TWR under a given surface gravity (m/s²).
@@ -237,11 +258,7 @@ impl Rocket {
     /// [`IspModel`] is vacuum. On Mars (3.72 m/s²) the same rocket has 2.6× the TWR.
     pub fn liftoff_twr_in(&self, gravity: f64) -> Ratio {
         let first = &self.stages[0];
-        let thrust = match self.booster_isp {
-            IspModel::AscentAveraged => first.thrust_sl(),
-            // No atmosphere to push against, so the pad sees vacuum thrust.
-            IspModel::Vacuum => first.thrust_vac(),
-        };
+        let thrust = first.engine().thrust_for(self.booster_isp) * first.engine_count();
         twr(thrust, self.total_mass(), gravity)
     }
 
@@ -250,8 +267,10 @@ impl Rocket {
     /// # Arguments
     ///
     /// * `stage_index` - Which stage (0 = first stage)
+    ///
+    /// Quoted against the rocket's own [`surface_gravity`](Self::surface_gravity).
     pub fn stage_twr(&self, stage_index: usize) -> Ratio {
-        self.stage_twr_in(stage_index, G0)
+        self.stage_twr_in(stage_index, self.surface_gravity)
     }
 
     /// Vacuum TWR at ignition of a stage, under a given gravity (m/s²).

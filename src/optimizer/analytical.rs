@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use crate::stage::{Rocket, Stage};
 use crate::units::Mass;
 
-use super::sizing::{size_for_delta_v, Failure, SizedStage, StageEngine};
+use super::sizing::{infeasible, size_for_delta_v, Failure, SizedStage, StageEngine};
 use super::solution::DELTA_V_TOLERANCE_MPS;
 use super::{OptimizeError, Optimizer, Problem, Solution};
 
@@ -249,17 +249,9 @@ fn optimize_assignment<'p>(
     };
     let n = stages.len();
     let mut evaluations = 0u64;
-    let mut worst_failure = Failure::StructuralLimit;
-
     let mut eval = |split: &[f64]| -> f64 {
         evaluations += 1;
-        match sizer.total_mass(split) {
-            Ok(mass) => mass,
-            Err(f) => {
-                worst_failure = worst_failure.max(f);
-                f64::INFINITY
-            }
-        }
+        sizer.total_mass(split).unwrap_or(f64::INFINITY)
     };
 
     // No split can beat the structural ceiling: every stage at the largest
@@ -284,6 +276,10 @@ fn optimize_assignment<'p>(
             *dv -= shortfall / (n - 1) as f64;
         }
     }
+    // If even the refined search finds nothing, the reason to report is the
+    // one at this starting split: the scan also visits extreme splits, whose
+    // failures describe those extremes rather than the problem.
+    let start_failure = sizer.total_mass(&split).err();
     let mut best = eval(&split);
 
     // Refine by moving delta-v between each pair of stages in turn. Integer
@@ -360,7 +356,10 @@ fn optimize_assignment<'p>(
     }
 
     if !best.is_finite() {
-        return (Err(worst_failure), evaluations);
+        return (
+            Err(start_failure.unwrap_or(Failure::StructuralLimit)),
+            evaluations,
+        );
     }
     let sized = sizer
         .size(&split)
@@ -393,55 +392,6 @@ fn assignments(candidates: &[Vec<&crate::engine::Engine>]) -> Vec<Vec<usize>> {
     out
 }
 
-impl AnalyticalOptimizer {
-    fn infeasible(problem: &Problem, failure: Failure) -> OptimizeError {
-        let c = &problem.constraints;
-        let (_, max_stages) = problem.stage_count_range();
-        let reason = match failure {
-            Failure::StructuralLimit => format!(
-                "Structural ratio {:.0}% is too high to reach {:.0} m/s with up to {} stages.\n\n\
-                Suggestions:\n  \
-                - Lower --structural-ratio (currently {:.0}%)\n  \
-                - Allow more stages with --max-stages\n  \
-                - Use an engine with higher ISP\n  \
-                - Reduce target delta-v",
-                c.structural_ratio.as_f64() * 100.0,
-                problem.design_delta_v().as_mps(),
-                max_stages,
-                c.structural_ratio.as_f64() * 100.0,
-            ),
-            Failure::EngineLimit => format!(
-                "Reaching the minimum TWR needs more than {} engines on a stage.\n\n\
-                Suggestions:\n  \
-                - Allow more engines with --max-engines\n  \
-                - Lower --min-twr (currently {:.2}) or --min-upper-twr (currently {:.2})\n  \
-                - Use an engine with higher thrust",
-                c.max_engines_per_stage,
-                c.min_liftoff_twr.as_f64(),
-                c.min_stage_twr.as_f64(),
-            ),
-            Failure::BoosterTooSmall => format!(
-                "The first stage can't deliver the {:.0} m/s it needs to carry an upper \
-                stage above the atmosphere.\n\n\
-                Suggestions:\n  \
-                - Increase target delta-v, or use a single stage\n  \
-                - Use a first-stage engine with more thrust",
-                c.min_booster_delta_v.as_mps(),
-            ),
-            Failure::EnginesTooHeavy => format!(
-                "No number of engines can reach TWR {:.2}: each engine weighs too much \
-                for its thrust at {:.2} m/s².\n\n\
-                Suggestions:\n  \
-                - Lower --min-twr\n  \
-                - Use an engine with a better thrust-to-weight ratio",
-                c.min_liftoff_twr.as_f64(),
-                c.surface_gravity,
-            ),
-        };
-        OptimizeError::Infeasible { reason }
-    }
-}
-
 impl Optimizer for AnalyticalOptimizer {
     fn optimize(&self, problem: &Problem) -> Result<Solution, OptimizeError> {
         let start = Instant::now();
@@ -452,6 +402,7 @@ impl Optimizer for AnalyticalOptimizer {
         let mut best: Option<Design> = None;
         let mut worst_failure = None;
         let mut evaluations = 0u64;
+        let mut too_many = None;
 
         for stage_count in min_stages..=max_stages {
             let candidates: Vec<Vec<_>> = (0..stage_count as usize)
@@ -462,15 +413,10 @@ impl Optimizer for AnalyticalOptimizer {
             }
             let combinations: usize = candidates.iter().map(Vec::len).product();
             if combinations > MAX_ASSIGNMENTS {
-                return Err(OptimizeError::Unsupported {
-                    reason: format!(
-                        "{} engines over {} stages is {} combinations; pin engines to \
-                        stages or offer fewer engines",
-                        problem.available_engines.len(),
-                        stage_count,
-                        combinations
-                    ),
-                });
+                // Every larger stage count is larger still, so stop here and
+                // keep whatever the smaller counts found.
+                too_many = Some((stage_count, combinations));
+                break;
             }
 
             let results: Vec<_> = assignments(&candidates)
@@ -501,9 +447,24 @@ impl Optimizer for AnalyticalOptimizer {
             }
         }
 
-        let design = best.ok_or_else(|| {
-            Self::infeasible(problem, worst_failure.unwrap_or(Failure::StructuralLimit))
-        })?;
+        let design = match (best, too_many) {
+            (Some(design), _) => design,
+            (None, Some((stage_count, combinations))) => {
+                return Err(OptimizeError::Unsupported {
+                    reason: format!(
+                        "{stage_count} stages with these engines is {combinations} \
+                        engine-to-stage combinations, more than the {MAX_ASSIGNMENTS} \
+                        tsi will search; pin engines to stages or offer fewer engines"
+                    ),
+                })
+            }
+            (None, None) => {
+                return Err(infeasible(
+                    problem,
+                    worst_failure.unwrap_or(Failure::StructuralLimit),
+                ))
+            }
+        };
 
         let tankage = constraints.structural_ratio.as_f64();
         let stages = design
@@ -519,7 +480,9 @@ impl Optimizer for AnalyticalOptimizer {
                 )
             })
             .collect();
-        let rocket = Rocket::new(stages, problem.payload).with_booster_isp(constraints.booster_isp);
+        let rocket = Rocket::new(stages, problem.payload)
+            .with_booster_isp(constraints.booster_isp)
+            .with_surface_gravity(problem.constraints.surface_gravity);
 
         let solution = Solution::with_metadata(
             rocket,
@@ -731,6 +694,48 @@ mod tests {
         let problem = two_stage(vec![get("raptor-2")], 100_000.0, 50_000.0);
         let result = AnalyticalOptimizer.optimize(&problem);
         assert!(matches!(result, Err(OptimizeError::Infeasible { .. })));
+    }
+
+    #[test]
+    fn too_many_combinations_keeps_smaller_stage_counts() {
+        // 60 engines: 2 stages is 3,600 combinations, 3 stages is 216,000,
+        // over the cap. The 2-stage answer must survive the 3-stage refusal.
+        let base = get("raptor-2");
+        let engines: Vec<Engine> = (0..60)
+            .map(|i| {
+                Engine::new(
+                    format!("Raptor-{i}"),
+                    base.thrust_sl() * (1.0 + i as f64 * 1e-3),
+                    base.thrust_vac(),
+                    base.isp_sl(),
+                    base.isp_vac(),
+                    base.dry_mass(),
+                    base.propellant,
+                )
+            })
+            .collect();
+        let mut problem = Problem::new(
+            Mass::kg(5_000.0),
+            Velocity::mps(9_400.0),
+            engines,
+            Constraints::default(),
+        );
+        problem.constraints.max_stages = 3;
+        let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
+        assert_eq!(solution.rocket.stage_count(), 2);
+    }
+
+    #[test]
+    fn upper_stage_twr_failure_names_the_upper_stage_flag() {
+        let mut problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
+        problem.constraints.min_stage_twr = Ratio::new(200.0);
+        match AnalyticalOptimizer.optimize(&problem) {
+            Err(OptimizeError::Infeasible { reason }) => {
+                assert!(reason.contains("--min-upper-twr"), "{reason}");
+                assert!(reason.contains("stage 2"), "{reason}");
+            }
+            other => panic!("expected infeasible, got {other:?}"),
+        }
     }
 
     #[test]

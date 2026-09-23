@@ -1259,3 +1259,132 @@ fn custom_engine_rejects_nan() {
         .failure()
         .stderr(predicate::str::contains("Thrust must be positive"));
 }
+
+// ============================================================================
+// v0.7 review fixes
+// ============================================================================
+
+#[test]
+fn vacuum_only_engines_get_a_sea_level_error() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "rl-10c",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("can fly from sea level"));
+}
+
+#[test]
+fn vacuum_engine_pinned_to_booster_is_rejected() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--stage1-engine",
+            "rl-10c",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no sea-level rating"));
+}
+
+#[test]
+fn upper_stage_twr_error_names_the_right_flag() {
+    for optimizer in ["analytical", "brute-force"] {
+        tsi()
+            .args([
+                "optimize",
+                "--payload",
+                "5000",
+                "--target-dv",
+                "9400",
+                "--engine",
+                "raptor-2",
+                "--min-upper-twr",
+                "200",
+                "--optimizer",
+                optimizer,
+                "--quiet",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("--min-upper-twr"));
+    }
+}
+
+#[test]
+fn engine_limit_error_names_the_booster() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "100000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--quiet",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "stage 1 needs more than 9 engines",
+        ));
+}
+
+#[test]
+fn monte_carlo_without_uncertainty_counts_every_build() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--monte-carlo",
+        "200",
+        "--uncertainty",
+        "none",
+    ]);
+    assert_eq!(json["monte_carlo"]["total_runs"], 200);
+    assert_eq!(json["monte_carlo"]["successes"], 200);
+}
+
+#[test]
+fn monte_carlo_on_the_moon_uses_lunar_gravity() {
+    // Liftoff TWR 1.3 at 1.62 m/s² is only 0.2 at g₀. Monte Carlo used to
+    // judge builds at g₀ and call every one "too heavy to lift off".
+    let json = optimize_json(&[
+        "--payload",
+        "300000",
+        "--target-dv",
+        "4000",
+        "--engine",
+        "merlin-1d",
+        "--gravity",
+        "moon",
+        "--max-engines",
+        "30",
+        "--margin",
+        "3",
+        "--monte-carlo",
+        "200",
+        "--seed",
+        "1",
+    ]);
+    assert_eq!(json["monte_carlo"]["failures"], 0);
+    assert!(json["monte_carlo"]["success_probability"].as_f64().unwrap() > 0.9);
+    assert!(json["stages"][0]["twr_liftoff"].as_f64().unwrap() >= 1.2);
+}

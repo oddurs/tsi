@@ -12,7 +12,7 @@ use crate::stage::{Rocket, Stage};
 use crate::units::Mass;
 
 use super::sizing::{size_for_propellant, StageEngine};
-use super::{OptimizeError, Optimizer, Problem, Solution};
+use super::{AnalyticalOptimizer, OptimizeError, Optimizer, Problem, Solution};
 
 /// Default propellant grid, as multiples of the payload mass.
 const DEFAULT_MIN_PROPELLANT_PER_PAYLOAD: f64 = 0.05;
@@ -362,15 +362,21 @@ impl Optimizer for BruteForceOptimizer {
 
         let iterations = counter.load(Ordering::Relaxed);
         let Some((_, choices, engines)) = best else {
-            return Err(OptimizeError::Infeasible {
-                reason: format!(
-                    "No feasible configuration found after {iterations} evaluations.\n\n\
-                    Suggestions:\n  \
-                    - Allow more stages with --max-stages\n  \
-                    - Lower --min-twr to allow lower thrust-to-weight\n  \
-                    - Try different engines with higher ISP or thrust\n  \
-                    - Reduce target delta-v or payload mass"
-                ),
+            // The grid can't say why nothing worked. The analytical optimizer
+            // can: either the problem is infeasible, and it says which limit
+            // binds, or a design exists and the grid stepped over it.
+            return Err(match AnalyticalOptimizer.optimize(problem) {
+                Err(e) => e,
+                Ok(found) => OptimizeError::Infeasible {
+                    reason: format!(
+                        "The brute force grid found nothing after {iterations} evaluations, \
+                        but a {:.0} kg design exists.\n\n\
+                        Suggestions:\n  \
+                        - Use --optimizer analytical\n  \
+                        - Use a finer grid (BruteForceOptimizer::new)",
+                        found.rocket.total_mass().as_kg()
+                    ),
+                },
             });
         };
 

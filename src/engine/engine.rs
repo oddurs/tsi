@@ -172,10 +172,30 @@ impl Engine {
     /// Vacuum gives [`isp_vac`](Self::isp_vac). Ascent-averaged evaluates
     /// [`isp_at`](Self::isp_at) at the mean pressure a first stage sees on its
     /// way to orbit (see [`crate::physics::ASCENT_MEAN_PRESSURE_RATIO`]).
+    ///
+    /// An upper-stage-only engine (no sea-level rating) has no meaningful
+    /// ascent-averaged Isp: its nozzle can't run at sea level at all. It gets
+    /// zero, so a stage built around one delivers no delta-v rather than a
+    /// plausible-looking number. The optimizers never put such an engine on
+    /// an Earth first stage.
     pub fn isp_for(&self, model: IspModel) -> Isp {
         match model {
             IspModel::Vacuum => self.isp_vac(),
+            IspModel::AscentAveraged if self.is_upper_stage_only() => Isp::seconds(0.0),
             IspModel::AscentAveraged => self.isp_at(model.mean_pressure_ratio()),
+        }
+    }
+
+    /// The thrust that matters for TWR under the given [`IspModel`]: sea-level
+    /// thrust for a first stage leaving Earth's surface, vacuum thrust
+    /// otherwise.
+    ///
+    /// Only the liftoff moment is checked, and at liftoff an Earth-launched
+    /// booster is pushing against a full atmosphere.
+    pub fn thrust_for(&self, model: IspModel) -> Force {
+        match model {
+            IspModel::Vacuum => self.thrust_vac(),
+            IspModel::AscentAveraged => self.thrust_sl(),
         }
     }
 

@@ -95,17 +95,18 @@ pub fn print_stage_box(
     println!("  └{}┘", "─".repeat(BOX_WIDTH));
 }
 
-/// Print the complete optimization solution for an Earth launch.
+/// Print the complete optimization solution.
 pub fn print_solution(solution: &Solution) {
-    print_solution_with_options(solution, crate::physics::G0, 0.0);
+    print_solution_with_options(solution, 0.0);
 }
 
 /// Print the complete optimization solution.
 ///
-/// `gravity` is the surface gravity TWR is quoted against, and
-/// `design_margin` the delta-v margin (as a fraction) the rocket was sized
-/// for, shown next to the margin it achieved.
-pub fn print_solution_with_options(solution: &Solution, gravity: f64, design_margin: f64) {
+/// `design_margin` is the delta-v margin (as a fraction) the rocket was
+/// sized for, shown next to the margin it achieved. TWR is quoted against the
+/// rocket's own surface gravity.
+pub fn print_solution_with_options(solution: &Solution, design_margin: f64) {
+    let gravity = solution.rocket.surface_gravity();
     let rocket = &solution.rocket;
     let stages = rocket.stages();
     let target_dv = solution.target_delta_v.as_mps();

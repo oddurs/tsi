@@ -4,11 +4,11 @@
 
 use crate::units::Ratio;
 
-/// Time-averaged ambient pressure, as a fraction of sea level, seen by a
-/// first stage during a typical ascent to orbit.
+/// Ambient pressure, as a fraction of sea level, averaged over a first
+/// stage's burn the way the rocket equation weights it (by 1/mass).
 ///
 /// See [`IspModel`] for the derivation.
-pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.3;
+pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.2;
 
 /// How a stage's specific impulse is evaluated over its burn.
 ///
@@ -35,25 +35,38 @@ pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.3;
 ///
 /// # The ascent-averaged model
 ///
-/// Engines burn propellant at a nearly constant rate, so the Isp that goes into
-/// the rocket equation is the time average of Isp over the burn. Isp is close
-/// to linear in ambient pressure ([`Engine::isp_at`](crate::engine::Engine::isp_at)),
-/// so what we need is the time average of the pressure ratio p/p₀.
-///
-/// Suppose the booster climbs to burnout altitude h_b along roughly
-/// h(t) = h_b·(t/T)², with the atmosphere falling off with scale height
-/// H ≈ 8 km. Then:
+/// The rocket equation adds up velocity burn by burn: each kilogram of
+/// propellant dm adds c·dm/m, where m is the mass at that moment. Written for
+/// a whole burn,
 ///
 /// ```text
-///  p     1            1                              √π
-/// ⟨─⟩ = ─ ∫ e^(−h/H) dt = ∫ e^(−(h_b/H)·u²) du  ≈  ────────────
-///  p₀   T              0                           2·√(h_b / H)
+/// Δv = ∫ c(t) · ṁ/m(t) dt
 /// ```
 ///
-/// With h_b ≈ 65 km this comes to 0.31, and the answer moves only slowly with
-/// h_b (0.28 at 80 km, 0.35 at 50 km). tsi uses
-/// [`ASCENT_MEAN_PRESSURE_RATIO`] = 0.3. For a Merlin-1D that gives 302 s,
-/// close to the ~300 s usually quoted for Falcon 9's first stage.
+/// so the effective exhaust velocity is an average of c weighted by 1/m, not
+/// a plain time average. The last kilogram burned counts R times as much as
+/// the first (R is the stage's mass ratio, including everything above it).
+/// That favours the end of the burn, which happens high up in thin air.
+///
+/// Isp is close to linear in ambient pressure
+/// ([`Engine::isp_at`](crate::engine::Engine::isp_at)), so what we need is the
+/// same 1/m-weighted average of the pressure ratio p/p₀. Suppose the booster
+/// burns at a constant rate, climbs to burnout altitude h_b along roughly
+/// h(t) = h_b·(t/T)², and flies through an atmosphere with scale height
+/// H ≈ 8 km. With u = t/T running from 0 to 1:
+///
+/// ```text
+///          ∫ e^(−(h_b/H)·u²) · w(u) du                        1
+/// ⟨p/p₀⟩ = ────────────────────────────     w(u) = ─────────────────────
+///                ∫ w(u) du                         1 − (1 − 1/R)·u
+/// ```
+///
+/// For h_b = 65 km and R = 3.5, typical of a first stage carrying its upper
+/// stage (Falcon 9's is 3.6, Saturn V's S-IC 3.8), this gives 0.21. It stays
+/// between 0.17 and 0.27 across burnout heights of 50-80 km and mass ratios
+/// of 2.5-4.5. A plain time average would give 0.31, overweighting the dense
+/// early air. tsi uses [`ASCENT_MEAN_PRESSURE_RATIO`] = 0.2. For a Merlin-1D
+/// that gives 305 s, against 282 s at sea level and 311 s in vacuum.
 ///
 /// This is a first-order model. It ignores throttling, the real shape of the
 /// trajectory, and flow separation in over-expanded nozzles.
@@ -74,7 +87,7 @@ pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.3;
 /// let ascent = merlin.isp_for(IspModel::AscentAveraged).as_seconds();
 ///
 /// assert_eq!(vac, 311.0);
-/// assert!((ascent - 302.3).abs() < 0.1);
+/// assert!((ascent - 305.2).abs() < 0.1);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IspModel {
@@ -110,21 +123,44 @@ impl IspModel {
 mod tests {
     use super::*;
 
+    /// The 1/m-weighted mean pressure ratio from the model in the
+    /// [`IspModel`] docs.
+    fn weighted_mean_pressure(burnout_km: f64, mass_ratio: f64) -> f64 {
+        let scale_height_km = 8.0;
+        let n = 20_000;
+        let (mut num, mut den) = (0.0, 0.0);
+        for i in 0..n {
+            let u = (i as f64 + 0.5) / n as f64;
+            let w = 1.0 / (1.0 - (1.0 - 1.0 / mass_ratio) * u);
+            num += (-(burnout_km / scale_height_km) * u * u).exp() * w;
+            den += w;
+        }
+        num / den
+    }
+
     #[test]
     fn derivation_matches_constant() {
-        // Numerically integrate the model in the IspModel docs and check the
-        // constant is a fair rounding of it.
-        let h_b = 65.0;
-        let scale_height = 8.0;
-        let n = 10_000;
-        let mean: f64 = (0..n)
-            .map(|i| {
-                let u = (i as f64 + 0.5) / n as f64;
-                (-(h_b / scale_height) * u * u).exp()
-            })
-            .sum::<f64>()
-            / n as f64;
+        let mean = weighted_mean_pressure(65.0, 3.5);
+        assert!((mean - 0.21).abs() < 0.005, "{mean}");
         assert!((mean - ASCENT_MEAN_PRESSURE_RATIO).abs() < 0.02, "{mean}");
+    }
+
+    #[test]
+    fn range_quoted_in_docs_holds() {
+        for h_b in [50.0, 65.0, 80.0] {
+            for r in [2.5, 3.5, 4.5] {
+                let mean = weighted_mean_pressure(h_b, r);
+                assert!((0.165..0.275).contains(&mean), "h_b {h_b} R {r}: {mean}");
+            }
+        }
+    }
+
+    #[test]
+    fn mass_weighting_lowers_the_mean() {
+        // With R → 1 the weighting vanishes and we get the plain time average.
+        let time_average = weighted_mean_pressure(65.0, 1.000_001);
+        assert!((time_average - 0.31).abs() < 0.01, "{time_average}");
+        assert!(weighted_mean_pressure(65.0, 3.5) < time_average);
     }
 
     #[test]

@@ -174,8 +174,10 @@ Real stages break two of its assumptions:
   one. The optimum moves delta-v toward the stage that carries its engines best.
 - **The first stage flies through air.** Back-pressure on the nozzle lowers Isp
   at low altitude. Averaged over a typical climb, a Merlin-1D delivers about
-  302 s rather than its vacuum 311 s. tsi evaluates first stages at the mean
-  pressure ratio of a nominal ascent (0.3 of sea level) and upper stages in vacuum.
+  305 s rather than its vacuum 311 s. The average is weighted the way the
+  rocket equation weights it, by 1/mass, so the light, high end of the burn
+  counts most. tsi evaluates first stages at the resulting mean pressure ratio
+  (0.2 of sea level) and upper stages in vacuum.
 
 `tsi optimize` starts from the classical solution and refines it with both
 effects included. For a Raptor-2 rocket carrying 5 t to 9,400 m/s, the booster

@@ -89,19 +89,20 @@ fn falcon_9_stage_1_ideal_delta_v() {
     let wet_mass = propellant_mass + dry_mass;
     let mass_ratio = wet_mass / dry_mass;
 
-    // tsi's ascent-averaged model: Merlin-1D at the mean pressure a booster
-    // sees on its way up (282 s at sea level, 311 s in vacuum). Falcon 9's
-    // first stage is usually quoted at an average of about 300 s.
+    // tsi's ascent-averaged model: Merlin-1D (282 s at sea level, 311 s in
+    // vacuum) at the mean pressure a booster sees on its way up. The rocket
+    // equation weights the light, high end of the burn most, so the result
+    // sits nearer the vacuum figure than the sea-level one.
     let merlin = EngineDatabase::default().get("merlin-1d").unwrap().clone();
-    let isp = merlin.isp_for(IspModel::AscentAveraged);
+    let isp = merlin.isp_for(IspModel::AscentAveraged).as_seconds();
+    let midpoint = (282.0 + 311.0) / 2.0;
     assert!(
-        (isp.as_seconds() - 300.0).abs() < 5.0,
-        "F9 S1 effective Isp: {}",
-        isp
+        (midpoint..311.0).contains(&isp),
+        "F9 S1 effective Isp: {isp} s"
     );
 
     // Isolated (no second stage on top): ~8,700 m/s ideal
-    let dv = delta_v(isp, mass_ratio).as_mps();
+    let dv = delta_v(Isp::seconds(isp), mass_ratio).as_mps();
     assert!(
         (dv / 8_700.0 - 1.0).abs() < 0.03,
         "F9 S1 isolated delta-v: {dv:.0} m/s"

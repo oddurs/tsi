@@ -423,16 +423,26 @@ impl MonteCarloRunner {
         let target = design.target_delta_v;
         let nominal = &design.rocket;
 
-        if self.uncertainty.is_zero() || iterations == 0 {
-            let dv = nominal.total_delta_v().as_mps();
-            let lifts_off = nominal.liftoff_twr().as_f64() > 1.0;
-            let success = dv >= target.as_mps() - DELTA_V_TOLERANCE_MPS && lifts_off;
+        // A build succeeds if it reaches the target (allowing the rounding
+        // that a design sized exactly to it carries) and can leave the pad.
+        let succeeds =
+            |s: &Sample| s.lifts_off && s.delta_v >= target.as_mps() - DELTA_V_TOLERANCE_MPS;
+
+        if self.uncertainty.is_zero() {
+            // Every build is the nominal design, so evaluate it once and
+            // count it as many times as asked.
+            let sample = Sample {
+                delta_v: nominal.total_delta_v().as_mps(),
+                mass: nominal.total_mass().as_kg(),
+                lifts_off: nominal.liftoff_twr().as_f64() > 1.0,
+            };
+            let once = |x: f64| if iterations == 0 { vec![] } else { vec![x] };
             return MonteCarloResults {
-                delta_v_samples: vec![dv],
-                mass_samples: vec![nominal.total_mass().as_kg()],
-                successes: u64::from(success),
-                total_runs: 1,
-                failures: u64::from(!lifts_off),
+                delta_v_samples: once(sample.delta_v),
+                mass_samples: once(sample.mass),
+                successes: if succeeds(&sample) { iterations } else { 0 },
+                total_runs: iterations,
+                failures: if sample.lifts_off { 0 } else { iterations },
                 target_delta_v: target,
                 runtime: start.elapsed(),
                 nominal_solution: design.clone(),
@@ -469,10 +479,7 @@ impl MonteCarloRunner {
             eprintln!("\rMonte Carlo: 100% ({iterations}/{iterations})");
         }
 
-        let successes = samples
-            .iter()
-            .filter(|s| s.lifts_off && s.delta_v >= target.as_mps())
-            .count() as u64;
+        let successes = samples.iter().filter(|s| succeeds(s)).count() as u64;
         let failures = samples.iter().filter(|s| !s.lifts_off).count() as u64;
 
         MonteCarloResults {
@@ -535,9 +542,10 @@ mod tests {
             .run(&problem, 10)
             .expect("monte carlo should succeed");
 
-        // With zero uncertainty, should have 100% success
-        assert_eq!(results.successes, 1);
-        assert_eq!(results.total_runs, 1);
+        // Every build is the nominal design, which hits its target exactly:
+        // all 10 succeed, and the count reports the 10 asked for.
+        assert_eq!(results.successes, 10);
+        assert_eq!(results.total_runs, 10);
         assert_eq!(results.success_probability(), 1.0);
     }
 
@@ -596,6 +604,29 @@ mod tests {
         assert_eq!(many.seed, 42);
         assert_eq!(many.delta_v_samples, one.delta_v_samples);
         assert_eq!(many.successes, one.successes);
+    }
+
+    #[test]
+    fn lunar_designs_are_judged_against_lunar_gravity() {
+        // A Moon launch with liftoff TWR 1.3 at 1.62 m/s² has TWR 0.2 at g₀.
+        // Monte Carlo used to judge it at g₀ and call every build a failure.
+        let db = EngineDatabase::default();
+        let problem = Problem::new(
+            Mass::kg(300_000.0),
+            Velocity::mps(4_000.0),
+            vec![db.get("merlin-1d").unwrap().clone()],
+            Constraints::default()
+                .with_surface_gravity(1.62)
+                .with_booster_isp(crate::physics::IspModel::Vacuum)
+                .with_max_engines(30)
+                .with_margin(Ratio::new(0.03)),
+        );
+        let results = MonteCarloRunner::new(Uncertainty::default())
+            .with_seed(3)
+            .run(&problem, 500)
+            .unwrap();
+        assert_eq!(results.failures, 0, "builds judged unable to lift off");
+        assert!(results.success_probability() > 0.9);
     }
 
     #[test]

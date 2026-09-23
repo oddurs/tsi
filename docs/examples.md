@@ -102,34 +102,34 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  188,866 kg
+  Solution:   2-stage    Total mass:  186,599 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 29,388 kg (LOX/CH4)                            │
-  │  Dry mass:   3,951 kg                                       │
-  │  Δv:         4,993 m/s                                      │
-  │  Burn time:  41.2s                                          │
-  │  TWR:        6.52 at ignition                               │
+  │  Propellant: 28,819 kg (LOX/CH4)                            │
+  │  Dry mass:   3,906 kg                                       │
+  │  Δv:         4,955 m/s                                      │
+  │  Burn time:  40.4s                                          │
+  │  TWR:        6.62 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 137,896 kg (LOX/CH4)                           │
-  │  Dry mass:   12,632 kg                                      │
-  │  Δv:         4,407 m/s                                      │
-  │  Burn time:  3m 13s                                         │
-  │  TWR:        1.22 at liftoff                                │
+  │  Propellant: 136,365 kg (LOX/CH4)                           │
+  │  Dry mass:   12,509 kg                                      │
+  │  Δv:         4,445 m/s                                      │
+  │  Burn time:  3m 11s                                         │
+  │  TWR:        1.23 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Total propellant:  167,284 kg
-  Total dry mass:    16,583 kg
-  Total burn time:   234s
+  Total propellant:  165,184 kg
+  Total dry mass:    16,415 kg
+  Total burn time:   231s
 
-  Payload fraction:  2.65%
-  Delta-v margin:    +0 m/s (+0.0%)
-  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+  Payload fraction:  2.68%
+  Delta-v margin:    -0 m/s (-0.0%)
+  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
 
   Optimizer: Analytical (181 configs)
 
@@ -137,7 +137,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 ```
 
 Textbook staging theory says identical stages should split delta-v equally.
-tsi gives the booster less: from sea level its Raptor averages 343 s rather
+tsi gives the booster less: from sea level its Raptor averages 345 s rather
 than 350 s, and a single 1.6 t engine is a bigger burden on the small upper
 stage than on the booster.
 
@@ -202,7 +202,7 @@ The first reports about 50% success, the second nearly 100%.
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json | jq '.payload_fraction'
-0.02647374083812189
+0.0267954474962633
 ```
 
 ## Real Rocket Approximations

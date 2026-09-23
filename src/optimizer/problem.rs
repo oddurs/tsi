@@ -327,11 +327,9 @@ impl Problem {
         match self.stage_count {
             Some(n) => (n, n),
             None => {
-                let min_for_pins = self
-                    .pinned_engines
-                    .keys()
-                    .next_back()
-                    .map_or(1, |&i| i as u32 + 1);
+                let min_for_pins = self.pinned_engines.keys().next_back().map_or(1, |&i| {
+                    u32::try_from(i).map_or(u32::MAX, |i| i.saturating_add(1))
+                });
                 (min_for_pins.max(1), self.constraints.max_stages)
             }
         }
@@ -387,10 +385,13 @@ impl Problem {
             }
         }
 
+        // Validate constraints
+        self.constraints.validate()?;
+
         // Every pinned stage must fit within the allowed stage count
         let (min, max) = self.stage_count_range();
         if let Some(&stage) = self.pinned_engines.keys().next_back() {
-            if stage as u32 >= max {
+            if stage >= max as usize {
                 return Err(ProblemError::PinnedStageOutOfRange { stage, stages: max });
             }
         }
@@ -401,8 +402,34 @@ impl Problem {
             });
         }
 
-        // Validate constraints
-        self.constraints.validate()?;
+        // A vacuum-only engine can't be pinned under an Earth launch
+        let from_sea_level = self.constraints.booster_isp == IspModel::AscentAveraged;
+        if let Some(engine) = self.pinned_engines.get(&0) {
+            if from_sea_level && engine.is_upper_stage_only() {
+                return Err(ProblemError::VacuumEngineOnBooster {
+                    engine: engine.name.clone(),
+                });
+            }
+        }
+
+        // Some allowed stage count must have a candidate engine for every stage
+        if self.engines_for_stage(0).is_empty() {
+            return Err(ProblemError::NoFirstStageEngine {
+                offered: self
+                    .available_engines
+                    .iter()
+                    .map(|e| e.name.clone())
+                    .collect(),
+            });
+        }
+        let buildable =
+            (min..=max).any(|n| (0..n as usize).all(|i| !self.engines_for_stage(i).is_empty()));
+        if !buildable {
+            let stage = (0..min as usize)
+                .find(|&i| self.engines_for_stage(i).is_empty())
+                .unwrap_or(0);
+            return Err(ProblemError::NoEngineForStage { stage });
+        }
 
         Ok(())
     }
@@ -465,8 +492,24 @@ pub enum ProblemError {
     #[error("Stage count {requested} invalid (max {max})")]
     InvalidStageCount { requested: u32, max: u32 },
 
-    #[error("Engine pinned to stage {} but the rocket has at most {stages} stages", stage + 1)]
+    #[error("Engine pinned to stage {} but the rocket has at most {stages} stages", stage.saturating_add(1))]
     PinnedStageOutOfRange { stage: usize, stages: u32 },
+
+    #[error(
+        "{engine} has no sea-level rating, so it can't fly an Earth-launched first stage. \
+        Pin a sea-level engine such as merlin-1d or raptor-2 to stage 1."
+    )]
+    VacuumEngineOnBooster { engine: String },
+
+    #[error(
+        "None of the engines offered ({}) can fly from sea level: they're vacuum-only. \
+        Add a first-stage engine such as merlin-1d or raptor-2, or pin one to stage 1.",
+        offered.join(", ")
+    )]
+    NoFirstStageEngine { offered: Vec<String> },
+
+    #[error("No engine is available for stage {}: offer more engines or pin one to it", stage + 1)]
+    NoEngineForStage { stage: usize },
 
     #[error("Constraint error: {0}")]
     Constraint(#[from] ConstraintError),
@@ -577,6 +620,59 @@ mod tests {
 
         assert_eq!(problem.stage_count, Some(2));
         assert!(problem.is_valid().is_ok());
+    }
+
+    #[test]
+    fn huge_pinned_stage_index_is_rejected_not_wrapped() {
+        // 1 << 32 must not truncate to stage 0, and usize::MAX must not overflow.
+        for index in [usize::MAX, 1usize << 32.min(usize::BITS - 1)] {
+            let problem = Problem::new(
+                Mass::kg(5000.0),
+                Velocity::mps(9400.0),
+                vec![get_raptor()],
+                Constraints::default(),
+            )
+            .with_pinned_engine(index, get_raptor());
+            assert!(matches!(
+                problem.is_valid(),
+                Err(ProblemError::PinnedStageOutOfRange { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn vacuum_engine_pinned_to_booster_is_rejected() {
+        let db = EngineDatabase::default();
+        let problem = Problem::new(
+            Mass::kg(5000.0),
+            Velocity::mps(9400.0),
+            vec![get_raptor()],
+            Constraints::default(),
+        )
+        .with_pinned_engine(0, db.get("rl-10c").unwrap().clone());
+        assert!(matches!(
+            problem.is_valid(),
+            Err(ProblemError::VacuumEngineOnBooster { .. })
+        ));
+    }
+
+    #[test]
+    fn only_vacuum_engines_is_rejected() {
+        let db = EngineDatabase::default();
+        let problem = Problem::new(
+            Mass::kg(5000.0),
+            Velocity::mps(9400.0),
+            vec![db.get("rl-10c").unwrap().clone()],
+            Constraints::default(),
+        );
+        assert!(matches!(
+            problem.is_valid(),
+            Err(ProblemError::NoFirstStageEngine { .. })
+        ));
+        // ...but fine from the Moon, where there is no sea level to fly from.
+        let mut lunar = problem.clone();
+        lunar.constraints.booster_isp = IspModel::Vacuum;
+        assert!(lunar.is_valid().is_ok());
     }
 
     #[test]

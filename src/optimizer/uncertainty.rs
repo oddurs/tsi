@@ -261,7 +261,9 @@ impl ParameterSampler {
                 )
             })
             .collect();
-        Rocket::new(stages, rocket.payload()).with_booster_isp(rocket.booster_isp())
+        Rocket::new(stages, rocket.payload())
+            .with_booster_isp(rocket.booster_isp())
+            .with_surface_gravity(rocket.surface_gravity())
     }
 
     /// Draw a multiplicative factor N(1, percent/100), or exactly 1 for zero.

@@ -83,34 +83,34 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  188,866 kg
+  Solution:   2-stage    Total mass:  186,599 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 29,388 kg (LOX/CH4)                            │
-  │  Dry mass:   3,951 kg                                       │
-  │  Δv:         4,993 m/s                                      │
-  │  Burn time:  41.2s                                          │
-  │  TWR:        6.52 at ignition                               │
+  │  Propellant: 28,819 kg (LOX/CH4)                            │
+  │  Dry mass:   3,906 kg                                       │
+  │  Δv:         4,955 m/s                                      │
+  │  Burn time:  40.4s                                          │
+  │  TWR:        6.62 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 137,896 kg (LOX/CH4)                           │
-  │  Dry mass:   12,632 kg                                      │
-  │  Δv:         4,407 m/s                                      │
-  │  Burn time:  3m 13s                                         │
-  │  TWR:        1.22 at liftoff                                │
+  │  Propellant: 136,365 kg (LOX/CH4)                           │
+  │  Dry mass:   12,509 kg                                      │
+  │  Δv:         4,445 m/s                                      │
+  │  Burn time:  3m 11s                                         │
+  │  TWR:        1.23 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Total propellant:  167,284 kg
-  Total dry mass:    16,583 kg
-  Total burn time:   234s
+  Total propellant:  165,184 kg
+  Total dry mass:    16,415 kg
+  Total burn time:   231s
 
-  Payload fraction:  2.65%
-  Delta-v margin:    +0 m/s (+0.0%)
-  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+  Payload fraction:  2.68%
+  Delta-v margin:    -0 m/s (-0.0%)
+  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
 
   Optimizer: Analytical (181 configs)
 
@@ -118,7 +118,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
 ```
 
 The booster gets a little less delta-v than the upper stage: from sea level
-its Raptor delivers 343 s rather than 350 s, and its engine mass counts for
+its Raptor delivers 345 s rather than 350 s, and its engine mass counts for
 less on a big stage. Ask for headroom with `--margin 2%`.
 
 ### Compact output for scripting
@@ -207,7 +207,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
  |            |
  |____________|
  |            |  <- Stage 1: Raptor-2 x1
- |            |     138k kg
+ |            |     136k kg
  |            |
  |     S1     |
  |            |
@@ -222,19 +222,19 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --show-losses
 
-  Gravity losses:     1,459 m/s
-  Drag losses:          212 m/s
+  Gravity losses:     1,434 m/s
+  Drag losses:          211 m/s
   Steering losses:      100 m/s
   ──────────────────────────────
-  Total losses:       1,771 m/s
+  Total losses:       1,745 m/s
 
   Ideal delta-v:      9,400 m/s
-  After losses:       7,629 m/s
+  After losses:       7,655 m/s
   LEO orbital v:      7,800 m/s
-  Shortfall:            171 m/s (insufficient)
+  Shortfall:            145 m/s (insufficient)
 ```
 
-A liftoff TWR of 1.22 means a long, slow climb and heavy gravity losses. Try
+A liftoff TWR of 1.23 means a long, slow climb and heavy gravity losses. Try
 `--min-twr 1.4` and compare.
 
 ### Multi-engine optimization
@@ -261,7 +261,7 @@ half the time, so give it some:
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
     --margin 3 --monte-carlo 1000 --seed 1
 
-  Design stressed:      2-stage, 220,098 kg (the solution above)
+  Design stressed:      2-stage, 217,426 kg (the solution above)
   Success probability:  100.0% (HIGH CONFIDENCE)
   Builds:               1000 (0 too heavy to lift off)
   Seed:                 1 (repeat with --seed 1)
@@ -269,7 +269,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
   Confidence Intervals:
     5th %ile:     9,541 m/s  (worst case)
     50th %ile:    9,680 m/s  (median)
-    95th %ile:    9,831 m/s  (best case)
+    95th %ile:    9,830 m/s  (best case)
 
 # Higher uncertainty for development engines
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \

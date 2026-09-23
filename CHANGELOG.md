@@ -24,8 +24,8 @@ and more honest, so expect different numbers from the same commands.
 - **A hidden 2% delta-v margin** was added to every analytical design.
   Margin is now an explicit constraint, default zero. (#8)
 - **First stages used vacuum Isp**, overstating booster delta-v by 5-10%. They
-  now use Isp averaged over the ascent (302 s for a Merlin-1D, against 311 s
-  in vacuum); upper stages still use vacuum. See `IspModel`. (#10)
+  now use Isp averaged over the ascent, weighted by 1/mass as the rocket
+  equation weights it (305 s for a Merlin-1D, against 311 s in vacuum); upper stages still use vacuum. See `IspModel`. (#10)
 - **Monte Carlo analysis re-optimized every sample**, so it measured whether
   *some* rocket could be found rather than whether *this* one survives, and it
   always reported 100%. It now builds the chosen design with correlated
@@ -60,8 +60,16 @@ and more honest, so expect different numbers from the same commands.
   `Problem::stage_count_range`, `Problem::engines_for_stage`.
 - `Constraints::{margin, surface_gravity, booster_isp}` and their `with_*`
   builders.
-- `IspModel`, `Engine::isp_for`, `Stage::delta_v_with`,
-  `Rocket::{with_booster_isp, isp_model, liftoff_twr_in, stage_twr_in}`.
+- `IspModel`, `Engine::{isp_for, thrust_for}`, `Stage::delta_v_with`,
+  `Rocket::{with_booster_isp, with_surface_gravity, surface_gravity,
+  isp_model, liftoff_twr_in, stage_twr_in}`. A rocket remembers the gravity
+  it was sized for, and `liftoff_twr` and `stage_twr` quote against it, so
+  Monte Carlo judges a lunar design by lunar gravity.
+- Up-front errors for problems no rocket can solve: only vacuum engines for an
+  Earth first stage, a vacuum engine pinned to stage 1, or a stage with no
+  engine to use. Infeasibility errors name the stage and the flag that binds
+  (`--min-twr` or `--min-upper-twr`), and brute force reports the same
+  diagnosis as the analytical optimizer.
 - `MonteCarloRunner::{with_seed, run_design}`, `MonteCarloResults::seed`,
   `ParameterSampler::{perturb_engine_with_rng, perturb_rocket}`, and
   `Solution::target_delta_v`.
@@ -78,7 +86,8 @@ and more honest, so expect different numbers from the same commands.
 - **Breaking:** JSON stage field `twr` is replaced by `twr_ignition`, plus
   `twr_liftoff` on stage 1.
 - **Breaking:** `terminal::print_solution` takes only the solution, and
-  `print_solution_with_options` takes (solution, gravity, design margin).
+  `print_solution_with_options` takes (solution, design margin); gravity
+  comes from the rocket.
 - Pretty output labels TWR "at liftoff" or "at ignition" and shows the
   booster Isp model.
 - `--sea-level` is deprecated and does nothing; liftoff TWR always uses
@@ -88,6 +97,9 @@ and more honest, so expect different numbers from the same commands.
 - `BruteForceOptimizer::with_vacuum_preference` is deprecated and has no
   effect.
 - `MonteCarloResults::failures` now counts builds too heavy to lift off.
+  With `--uncertainty none`, every requested build is counted, not just one.
+- Offering so many engines that the largest stage counts exceed the search
+  cap keeps the best design from smaller counts instead of failing.
 
 ### Known limitations
 

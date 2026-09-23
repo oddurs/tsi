@@ -48,17 +48,18 @@
 use crate::engine::Engine;
 use crate::physics::{IspModel, G0};
 
-use super::Problem;
+use super::{OptimizeError, Problem};
 
-/// Relative slack so that a rocket sized exactly to a TWR bound still
-/// passes the check after floating-point rounding.
-const TWR_SLACK: f64 = 1e-9;
+/// Relative tolerance on the TWR bound. A stage may come out up to one part
+/// in a billion under its minimum TWR rather than carry an extra engine
+/// because of floating-point rounding.
+pub(crate) const TWR_SLACK: f64 = 1e-9;
 
 /// Why a candidate stage (or rocket) could not be sized.
 ///
-/// Ordered from least to most informative. A search that fails everywhere
-/// reports the greatest failure it saw: running out of engines says more
-/// about what to change than a scan point that strayed past a limit.
+/// Ordered from least to most actionable, for choosing between the failures
+/// of different engine assignments: running out of engines says more about
+/// what to change than a structural limit that more stages would lift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Failure {
     /// The requested mass ratio is beyond what the tankage ratio allows.
@@ -66,16 +67,18 @@ pub(crate) enum Failure {
     /// The first stage would hand over to an upper stage too low in the
     /// atmosphere (see [`Constraints::min_booster_delta_v`](super::Constraints::min_booster_delta_v)).
     BoosterTooSmall,
-    /// Engines are too heavy for their thrust: no count meets the TWR.
-    EnginesTooHeavy,
-    /// The TWR needs more engines than a stage may carry.
-    EngineLimit,
+    /// Engines on this stage are too heavy for their thrust: no count meets the TWR.
+    EnginesTooHeavy { stage: usize },
+    /// The TWR on this stage needs more engines than a stage may carry.
+    EngineLimit { stage: usize },
 }
 
 /// One stage's engine, reduced to the numbers sizing needs.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct StageEngine<'a> {
     pub engine: &'a Engine,
+    /// Stage index, 0 = first stage
+    pub index: usize,
     /// Effective exhaust velocity c = Isp × g₀ (m/s)
     pub exhaust_velocity: f64,
     /// Thrust per engine used for the TWR check (N)
@@ -99,12 +102,10 @@ impl<'a> StageEngine<'a> {
         } else {
             (IspModel::Vacuum, constraints.min_stage_twr)
         };
-        let thrust = match model {
-            IspModel::AscentAveraged => engine.thrust_sl(),
-            IspModel::Vacuum => engine.thrust_vac(),
-        };
+        let thrust = engine.thrust_for(model);
         Self {
             engine,
+            index,
             exhaust_velocity: engine.isp_for(model).as_seconds() * G0,
             thrust: thrust.as_newtons(),
             engine_mass: engine.dry_mass().as_kg(),
@@ -126,11 +127,13 @@ impl<'a> StageEngine<'a> {
         let k = self.min_twr * gravity * growth;
         let net_thrust = self.thrust - k * self.engine_mass;
         if net_thrust.is_nan() || net_thrust <= 0.0 {
-            return Err(Failure::EnginesTooHeavy);
+            return Err(Failure::EnginesTooHeavy { stage: self.index });
         }
-        let needed = (k * fixed_mass / net_thrust * (1.0 + TWR_SLACK)).ceil();
+        // Shave a hair off before rounding up, so a requirement that lands a
+        // rounding error above a whole number doesn't cost a whole engine.
+        let needed = (k * fixed_mass / net_thrust * (1.0 - TWR_SLACK)).ceil();
         if needed.is_nan() || needed > f64::from(max_engines) {
-            return Err(Failure::EngineLimit);
+            return Err(Failure::EngineLimit { stage: self.index });
         }
         Ok((needed as u32).max(1))
     }
@@ -193,6 +196,71 @@ pub(crate) fn size_for_propellant(
         },
         stage.exhaust_velocity * (wet / dry).ln(),
     ))
+}
+
+/// Turn a sizing failure into an error that says what to change.
+pub(crate) fn infeasible(problem: &Problem, failure: Failure) -> OptimizeError {
+    let c = &problem.constraints;
+    let (_, max_stages) = problem.stage_count_range();
+    let reason = match failure {
+        Failure::StructuralLimit => format!(
+            "Structural ratio {:.0}% is too high to reach {:.0} m/s with up to {} stages.\n\n\
+            Suggestions:\n  \
+            - Lower --structural-ratio (currently {:.0}%)\n  \
+            - Allow more stages with --max-stages\n  \
+            - Use an engine with higher ISP\n  \
+            - Reduce target delta-v",
+            c.structural_ratio.as_f64() * 100.0,
+            problem.design_delta_v().as_mps(),
+            max_stages,
+            c.structural_ratio.as_f64() * 100.0,
+        ),
+        Failure::EngineLimit { stage } => {
+            let (flag, twr) = twr_limit(problem, stage);
+            format!(
+                "Reaching TWR {twr:.2} on stage {} needs more than {} engines.\n\n\
+                Suggestions:\n  \
+                - Allow more engines with --max-engines\n  \
+                - Lower {flag} (currently {twr:.2})\n  \
+                - Use an engine with higher thrust",
+                stage + 1,
+                c.max_engines_per_stage,
+            )
+        }
+        Failure::BoosterTooSmall => format!(
+            "The first stage can't deliver the {:.0} m/s it needs to carry an upper \
+            stage above the atmosphere.\n\n\
+            Suggestions:\n  \
+            - Increase target delta-v, or use a single stage\n  \
+            - Use a first-stage engine with more thrust",
+            c.min_booster_delta_v.as_mps(),
+        ),
+        Failure::EnginesTooHeavy { stage } => {
+            let (flag, twr) = twr_limit(problem, stage);
+            format!(
+                "No number of engines can give stage {} a TWR of {twr:.2}: each engine \
+                weighs too much for its thrust at {:.2} m/s².\n\n\
+                Suggestions:\n  \
+                - Lower {flag} (currently {twr:.2})\n  \
+                - Use an engine with a better thrust-to-weight ratio",
+                stage + 1,
+                c.surface_gravity,
+            )
+        }
+    };
+    OptimizeError::Infeasible { reason }
+}
+
+/// The CLI flag and value of the TWR limit that applies to a stage.
+fn twr_limit(problem: &Problem, stage: usize) -> (&'static str, f64) {
+    if stage == 0 {
+        ("--min-twr", problem.constraints.min_liftoff_twr.as_f64())
+    } else {
+        (
+            "--min-upper-twr",
+            problem.constraints.min_stage_twr.as_f64(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -264,6 +332,20 @@ mod tests {
     }
 
     #[test]
+    fn requirement_just_over_a_whole_number_is_not_rounded_up() {
+        let problem = problem();
+        let booster = StageEngine::new(&problem.available_engines[0], 0, &problem);
+        // Choose the fixed mass so that exactly 3 engines meet the TWR, then
+        // nudge it up by a rounding error.
+        let k = booster.min_twr * G0;
+        let exact = 3.0 * (booster.thrust - k * booster.engine_mass) / k;
+        let n = booster
+            .min_engine_count(exact * (1.0 + 1e-12), 1.0, G0, 9)
+            .unwrap();
+        assert_eq!(n, 3);
+    }
+
+    #[test]
     fn structural_limit_detected() {
         let problem = problem();
         let upper = StageEngine::new(&problem.available_engines[0], 1, &problem);
@@ -277,6 +359,6 @@ mod tests {
         let problem = problem();
         let booster = StageEngine::new(&problem.available_engines[0], 0, &problem);
         let result = size_for_delta_v(&booster, 4_000.0, 5_000_000.0, 0.08, G0, 9);
-        assert_eq!(result.unwrap_err(), Failure::EngineLimit);
+        assert_eq!(result.unwrap_err(), Failure::EngineLimit { stage: 0 });
     }
 }

@@ -196,7 +196,7 @@ hydrogen engine belongs on top.
 A few physical rules apply:
 
 - **Booster Isp.** An Earth launch's first stage uses Isp averaged over its
-  climb through the atmosphere (302 s for a Merlin-1D, against 311 s in
+  climb through the atmosphere (305 s for a Merlin-1D, against 311 s in
   vacuum). Upper stages use vacuum Isp. On Mars and the Moon every stage uses
   vacuum Isp.
 - **Liftoff TWR** uses sea-level thrust and the launch body's gravity.
@@ -270,34 +270,34 @@ how much margin 95% confidence needs, and the seed to repeat the run.
 ═══════════════════════════════════════════════════════════════
 
   Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  188,866 kg
+  Solution:   2-stage    Total mass:  186,599 kg
 
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 2 (upper)                                            │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 29,388 kg (LOX/CH4)                            │
-  │  Dry mass:   3,951 kg                                       │
-  │  Δv:         4,993 m/s                                      │
-  │  Burn time:  41.2s                                          │
-  │  TWR:        6.52 at ignition                               │
+  │  Propellant: 28,819 kg (LOX/CH4)                            │
+  │  Dry mass:   3,906 kg                                       │
+  │  Δv:         4,955 m/s                                      │
+  │  Burn time:  40.4s                                          │
+  │  TWR:        6.62 at ignition                               │
   └─────────────────────────────────────────────────────────────┘
   ┌─────────────────────────────────────────────────────────────┐
   │  STAGE 1 (booster)                                          │
   │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 137,896 kg (LOX/CH4)                           │
-  │  Dry mass:   12,632 kg                                      │
-  │  Δv:         4,407 m/s                                      │
-  │  Burn time:  3m 13s                                         │
-  │  TWR:        1.22 at liftoff                                │
+  │  Propellant: 136,365 kg (LOX/CH4)                           │
+  │  Dry mass:   12,509 kg                                      │
+  │  Δv:         4,445 m/s                                      │
+  │  Burn time:  3m 11s                                         │
+  │  TWR:        1.23 at liftoff                                │
   └─────────────────────────────────────────────────────────────┘
 
-  Total propellant:  167,284 kg
-  Total dry mass:    16,583 kg
-  Total burn time:   234s
+  Total propellant:  165,184 kg
+  Total dry mass:    16,415 kg
+  Total burn time:   231s
 
-  Payload fraction:  2.65%
-  Delta-v margin:    +0 m/s (+0.0%)
-  Booster Isp:       343s (ascent-averaged); upper stages use vacuum Isp
+  Payload fraction:  2.68%
+  Delta-v margin:    -0 m/s (-0.0%)
+  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
 
   Optimizer: Analytical (181 configs)
 

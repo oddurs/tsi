@@ -42,9 +42,9 @@ The tool is a Rust library + CLI application:
 - Property-based testing with proptest for physics and optimizer invariants
 - Validation tests against real rockets, honest about where ideal theory stops (see the Saturn V test)
 
-### Test Suite (308 tests)
-- **173 unit tests** - Inline in source modules
-- **69 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
+### Test Suite (323 tests)
+- **182 unit tests** - Inline in source modules
+- **75 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
 - **16 property tests** - Invariants via proptest (`tests/properties.rs`), including analytical vs brute force
 - **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
 - **32 doc tests** - Examples in rustdoc comments (none ignored)
@@ -76,7 +76,7 @@ The v0.1-v0.6 phase plan is archived at `docs/plan/roadmap-v0.md`.
 Core equation: `Δv = Isp × g₀ × ln(m_wet / m_dry)` where g₀ = 9.80665 m/s²
 
 Validation targets:
-- Falcon 9 S1: ~8,700 m/s isolated ideal delta-v (ascent-averaged Isp ~302 s)
+- Falcon 9 S1: ~8,700 m/s isolated ideal delta-v (ascent-averaged Isp ~305 s)
 - Falcon 9 stacked (S1 + S2 with 22.8 t payload): ~9,300 m/s
 - Optimizer redesign of Falcon 9: within 5% of the real 571.5 t
 - Saturn V S-IC: ~7,500-8,500 m/s isolated ideal delta-v
