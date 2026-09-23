@@ -51,14 +51,16 @@ The tool is designed as a Rust library + CLI application:
 
 ## Development Roadmap
 
-See `docs/roadmap.md` for detailed phases. Summary:
-1. **Foundation** - Unit types, physics core, `calculate` command
-2. **Engine Database** - TOML loading, `engines` command, Stage type
-3. **Two-Stage Optimization** - Rocket type, analytical optimizer, `optimize` command
-4. **Multi-Engine Search** - Brute force optimizer, multiple engine types
-5. **Uncertainty Analysis** - Monte Carlo simulation
-6. **Polish** - ASCII diagrams, shell completions
-7. **Release** - crates.io publication
+The roadmap and issues live in cairn (see the section at the end of this file).
+`ROADMAP.md` is generated from `cairn/items/`; never edit it by hand. Milestones:
+
+- **v0.7 Static fire** - optimizer and Monte Carlo correctness, clippy clean, CI
+- **v0.8 Stacking** - library-first API: feature-gated CLI, typed errors, no panics, serde
+- **v0.9 Wet dress** - character: `--explain`, mission targets, vehicle library, cited engine data
+- **v1.0 Liftoff** - API freeze, packaging, crates.io as `tsiolkovsky`
+
+Items flagged `breaking=true` must land before the 1.0 freeze (`cairn list --view breaking`).
+The v0.1-v0.6 phase plan is archived at `docs/plan/roadmap-v0.md`.
 
 ## Key Files
 
@@ -100,3 +102,60 @@ Based on prior conversations, the following preferences have been expressed:
 - **Type safety over convenience**: The newtype pattern for units prevents bugs at compile time
 - **Embed data for distribution**: Use `include_str!` so the binary is self-contained
 - **Avoid over-engineering**: Keep implementations simple and focused on the current task
+
+<!-- cairn:begin -->
+## Roadmap and issues
+
+This project tracks its roadmap and issues with `cairn`. Every item is a Markdown file under `cairn/items`, described by the schema in `cairn.toml`.
+
+**Do not create ad-hoc TODO, PLAN or NOTES files.** Create a cairn item instead, so the work appears on the board and in the generated roadmap.
+
+### The loop
+
+1. `cairn next` — what is ready to start. It excludes anything blocked by unfinished dependencies and puts work already in progress first.
+2. `cairn claim <ID>` — take it before you start, so no one duplicates the work. `cairn claim --next` picks and claims the top-ranked unclaimed item in one step, and prints its body so you can begin immediately.
+3. Do the work. Record what you learn: `cairn set <ID> <field>=<value>` for fields, `cairn note <ID> "<TEXT>"` for anything that needs a sentence — why you chose something, what you tried, what to watch for.
+4. `cairn tick <ID> <N>` as each acceptance criterion becomes true — `cairn show <ID> --criteria` lists them numbered. Tick what is true, not what would let you close.
+5. `cairn close <ID>` when it is done, or `cairn release <ID>` to hand it back.
+6. `cairn check` before you report finished. It must pass.
+
+### Commands
+
+```sh
+cairn next --json                 # ready work, ranked
+cairn claim --next                # take the next ready item
+cairn search <TEXT> --json        # titles, bodies and labels
+cairn list --json                 # all open items
+cairn list --filter 'blocked=false,priority=p0'
+cairn show <ID> --json            # one item, including its body
+cairn new "<TITLE>" --type <TYPE> --milestone <MILESTONE>
+cairn set <ID> status=<STATUS>    # also labels+=x, or any field below
+cairn note <ID> "<TEXT>"          # append reasoning; never replaces
+cairn show <ID> --criteria        # acceptance criteria, numbered
+cairn tick <ID> <N>               # tick one; --all for every one
+cairn close <ID>
+cairn check                       # validate; run before finishing
+cairn render                      # regenerate ROADMAP.md
+```
+
+### Schema
+
+- **Types**: `feature`, `bug`, `validation`, `docs`, `chore`, `milestone`
+- **Statuses**: `backlog` (open), `planned` (open), `doing` (active), `blocked` (active), `done` (done), `dropped` (dropped)
+- **`due`**: date, YYYY-MM-DD — when a milestone is meant to land
+- **`part_of`**: names any items, by id, several allowed — a larger piece of work this belongs to
+- **`priority`**: one of p0, p1, p2, p3 — p0 blocks its milestone; p3 is nice to have
+- **`effort`**: one of s, m, l, xl — s: under an hour, m: a session, l: two or three, xl: split it
+- **`area`**: one of units, physics, engine, stage, optimizer, output, cli, data, docs, infra — the module or concern this touches
+- **`breaking`**: true or false — changes the public library API or CLI contract
+- **Milestones**: `v0.7` (due 2026-10-06), `v0.8` (due 2026-10-27), `v0.9` (due 2026-11-17), `v1.0` (due 2026-12-01), `later`
+- **Saved views** (`cairn list --view NAME`): `now`, `next`, `triage`, `breaking`, `physics`
+
+### Rules
+
+1. Before starting work, find or create the item and set it to an active status.
+2. Use the fields above rather than inventing new ones; add new fields to `cairn.toml` first.
+3. Never hand-edit the generated roadmap file — change items and run `cairn render`.
+4. `cairn check` must pass before the work is considered done.
+
+<!-- cairn:end -->

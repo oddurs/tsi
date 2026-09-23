@@ -1,0 +1,239 @@
+# cairn.toml — the schema for tsi's roadmap and issues.
+#
+# Items live as Markdown files under cairn/items/. ROADMAP.md is generated from
+# them; never edit it by hand.
+#
+#   cairn next            what is ready to work on
+#   cairn roadmap         milestone progress
+#   cairn board           kanban by status
+#   cairn check           validate every item (CI runs this)
+#
+# Milestones are named for the stages of a launch campaign, because each one
+# earns the right to attempt the next:
+#
+#   v0.7  Static fire    the engine lights on the stand: correctness, hygiene, CI
+#   v0.8  Stacking       the vehicle is assembled: a library API worth depending on
+#   v0.9  Wet dress      full rehearsal: the features that give tsi its character
+#   v1.0  Liftoff        API freeze, release, and publication
+
+format = 3
+
+[project]
+name = "tsi"
+dir = "cairn/items"
+id_width = 4
+default_type = "feature"
+default_status = "backlog"
+url = "https://github.com/oddurs/tsi/blob/main"
+
+# ─── Item types ──────────────────────────────────────────────────────────────
+
+[[type]]
+name = "feature"
+icon = "+"
+color = "cyan"
+template = """
+## Problem
+
+## Proposal
+
+## Acceptance criteria
+
+- [ ] Unit tests, plus a property test if there is an invariant to state
+- [ ] Rustdoc explains the physical intuition, not just the signature
+- [ ] `cargo clippy --all-targets` and `cargo fmt --check` clean
+"""
+
+[[type]]
+name = "bug"
+icon = "!"
+color = "red"
+template = """
+## What happens
+
+## What should happen
+
+## Reproduction
+
+```sh
+tsi ...
+```
+
+## Acceptance criteria
+
+- [ ] A regression test that fails before the fix
+"""
+
+# Physics that must agree with the real world. Every validation item names a
+# reference vehicle, a published source, and the tolerance it is held to.
+[[type]]
+name = "validation"
+icon = "="
+color = "magenta"
+template = """
+## Reference
+
+Vehicle / engine:
+Source:
+
+## Expected
+
+| Quantity | Published | Tolerance |
+|----------|-----------|-----------|
+|          |           |           |
+
+## Acceptance criteria
+
+- [ ] Test in `tests/validation.rs` citing the source
+"""
+
+[[type]]
+name = "docs"
+icon = "*"
+color = "blue"
+
+[[type]]
+name = "chore"
+icon = "~"
+color = "gray"
+
+[[type]]
+name = "milestone"
+groups = "one"
+inverse = "scheduled"
+description = "a tsi release"
+
+# ─── Statuses ────────────────────────────────────────────────────────────────
+
+[[status]]
+name = "backlog"
+category = "open"
+color = "gray"
+
+[[status]]
+name = "planned"
+category = "open"
+color = "blue"
+
+[[status]]
+name = "doing"
+label = "in progress"
+category = "active"
+color = "yellow"
+
+[[status]]
+name = "blocked"
+category = "active"
+color = "red"
+
+[[status]]
+name = "done"
+category = "done"
+color = "green"
+
+[[status]]
+name = "dropped"
+category = "dropped"
+color = "gray"
+board = false
+
+# ─── Fields ──────────────────────────────────────────────────────────────────
+
+[[field]]
+name = "due"
+kind = "date"
+description = "when a milestone is meant to land"
+
+[[field]]
+name = "part_of"
+kind = "ref"
+target = "*"
+cardinality = "many"
+acyclic = true
+rollup = true
+inverse = "contains"
+description = "a larger piece of work this belongs to"
+
+[[field]]
+name = "priority"
+kind = "enum"
+values = ["p0", "p1", "p2", "p3"]
+default = "p2"
+column = true
+description = "p0 blocks its milestone; p3 is nice to have"
+
+[[field]]
+name = "effort"
+kind = "enum"
+values = ["s", "m", "l", "xl"]
+column = true
+description = "s: under an hour, m: a session, l: two or three, xl: split it"
+
+# The module the work lives in, matching src/. Kept as an enum so the board can
+# be sliced by subsystem without typos splitting a group in two.
+[[field]]
+name = "area"
+kind = "enum"
+values = ["units", "physics", "engine", "stage", "optimizer", "output", "cli", "data", "docs", "infra"]
+column = true
+description = "the module or concern this touches"
+
+# Anything that changes the public API must land before the 1.0 freeze; after
+# it, the same change needs a 2.0. The `breaking` view keeps them in sight.
+[[field]]
+name = "breaking"
+kind = "bool"
+description = "changes the public library API or CLI contract"
+
+# ─── Saved views ─────────────────────────────────────────────────────────────
+
+[[view]]
+name = "now"
+description = "What is actually being worked on"
+filter = "category=active"
+sort = "priority,id"
+
+[[view]]
+name = "next"
+description = "Planned work for the nearest milestone"
+filter = "status=planned"
+sort = "priority,milestone"
+
+[[view]]
+name = "triage"
+description = "Items that still need a milestone"
+filter = "milestone=,category!=done,type!=milestone"
+columns = ["id", "type", "title", "created"]
+
+[[view]]
+name = "breaking"
+description = "API changes that must land before the 1.0 freeze"
+filter = "breaking=true,category!=done,category!=dropped"
+sort = "milestone,priority"
+
+[[view]]
+name = "physics"
+description = "Correctness work: physics, optimizer, and validation"
+filter = "area=physics|optimizer|stage|units,category!=done"
+sort = "priority,id"
+
+# ─── Hooks ───────────────────────────────────────────────────────────────────
+
+[hooks]
+after-create = "cairn render -q"
+after-change = "cairn render -q"
+after-remove = "cairn render -q"
+
+# ─── Rendered roadmap ────────────────────────────────────────────────────────
+
+[render]
+target = "ROADMAP.md"
+title = "tsi Roadmap"
+group_by = "milestone"
+include = "category!=dropped"
+checkbox = true
+show_ids = true
+progress = true
+group_by_status = true
+link_items = true
+header = "cairn/roadmap-header.md"

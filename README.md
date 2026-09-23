@@ -259,9 +259,12 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
 - [x] v0.4 - Multi-engine optimization with brute-force search
 - [x] v0.5 - Monte Carlo uncertainty analysis
 - [x] v0.6 - Polish (ASCII diagrams, shell completions, custom engines)
-- [ ] v1.0 - Production release
+- [ ] v0.7 - Static fire (optimizer correctness, CI)
+- [ ] v0.8 - Stacking (library-first API)
+- [ ] v0.9 - Wet dress (`--explain`, mission targets, real vehicles)
+- [ ] v1.0 - Liftoff (API freeze, crates.io)
 
-See [docs/plan/roadmap.md](docs/plan/roadmap.md) for detailed plans.
+See [ROADMAP.md](ROADMAP.md) for the live plan.
 
 ## Contributing
 
