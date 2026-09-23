@@ -54,7 +54,7 @@ echo "ship: $url (auto-merge queued)"
 if [ "$wait" = 1 ]; then
   # CI takes a few seconds to register its checks
   for _ in $(seq 30); do
-    gh pr checks --required 2>&1 | grep -q "no required checks" || break
+    gh pr checks --required 2>&1 | grep -q "no .*checks reported" || break
     sleep 2
   done
   gh pr checks --watch --fail-fast --required || { echo "ship: CI failed; fix, commit, and run ship again" >&2; exit 1; }
