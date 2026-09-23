@@ -1,6 +1,6 @@
 # Getting Started
 
-`tsi` is a command-line tool for rocket staging analysis. Named after Konstantin Tsiolkovsky, the father of astronautics, it helps you calculate delta-v, analyze stage performance, and explore rocket configurations.
+`tsi` is a command-line tool for rocket staging analysis. Named after Konstantin Tsiolkovsky, the father of astronautics, it helps you calculate delta-v, analyze stage performance, and design the lightest rocket for a job. The same physics is available as a Rust library, `tsiolkovsky`.
 
 ## Installation
 
@@ -64,6 +64,52 @@ Burn time:  2m 20s
 TWR (vac):  2.24
 ```
 
+### Design a rocket
+
+Give `tsi` a payload, a delta-v target and some engines, and it designs the
+lightest rocket that does the job:
+
+```bash
+# 5 t to low Earth orbit (about 9,400 m/s including losses) with Raptors
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
+
+# Offer several engines; tsi decides which goes where
+tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,rl-10c --max-stages 3
+```
+
+The rocket is sized to hit the target exactly. Real hardware comes out a
+little better or worse than the drawings, so check how often the design would
+work, and add margin until the answer is comfortable:
+
+```bash
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --monte-carlo 10000
+tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --margin 3 --monte-carlo 10000
+```
+
+### Use it from Rust
+
+```toml
+[dependencies]
+tsiolkovsky = { version = "0.8", default-features = false }
+```
+
+```rust
+use tsiolkovsky::prelude::*;
+
+let raptor = EngineDatabase::builtin().get("raptor-2").unwrap().clone();
+let problem = Problem::builder()
+    .payload(Mass::tonnes(5.0))
+    .target(Velocity::mps(9_400.0))
+    .engine(raptor)
+    .build()?;
+let rocket = AnalyticalOptimizer.optimize(&problem)?.into_rocket();
+println!("{} stages, {} at liftoff", rocket.stage_count(), rocket.total_mass());
+```
+
+The `examples/` directory has runnable programs that answer real questions:
+why Falcon 9 has nine engines, what Raptors would do for Saturn V, and how
+much margin is enough. Run one with `cargo run --example falcon9`.
+
 ## Core Concepts
 
 ### Delta-v (Δv)
@@ -105,4 +151,5 @@ TWR = thrust / (mass × g₀)
 - [Command Reference](commands.md) - Full CLI documentation
 - [Engine Database](engines.md) - Available engines and their specs
 - [Examples](examples.md) - Common use cases and workflows
-- [Physics Reference](physics.md) - Formulas and calculations
+- [Physics Reference](physics.md) - Formulas, optimal staging, and where ideal theory stops
+- [API documentation](https://docs.rs/tsiolkovsky) - The library, with the theory behind each optimizer

@@ -88,8 +88,15 @@ tsi optimize --payload 5000 --target-dv 9400 \
   --custom-engine "MyEngine:2500:360:1800:loxch4" --engine MyEngine,raptor-2
 ```
 
-The format is `name:thrust_kn:isp_s:mass_kg:propellant`. Loading a whole
-engine file with `--engines-file` is planned (cairn item #40).
+The format is `name:thrust_kn:isp_s:mass_kg:propellant`. The thrust and Isp
+you give are vacuum values; tsi assumes 90% of the thrust and 85% of the Isp
+at sea level. Loading a whole engine file with `--engines-file` is planned
+(cairn item #40).
+
+Every engine, built in or custom, is checked when it is made: thrust, Isp and
+mass must be positive numbers, and an engine can't do better at sea level
+than in vacuum. An impossible engine is an error that names the problem, not
+a strange result.
 
 For `tsi calculate`, use manual parameters:
 

@@ -1,5 +1,8 @@
 # tsi — Concept
 
+> **Vision document.** Why tsi exists and who it is for. For what it does
+> today, see the [README](../../README.md) and the [roadmap](../../ROADMAP.md).
+
 ## The Idea
 
 `tsi` is a command-line tool that answers a deceptively simple question:

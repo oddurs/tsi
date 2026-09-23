@@ -38,8 +38,8 @@ When you want to explore hypothetical configurations:
 
 ```bash
 $ tsi calculate --isp 380 --mass-ratio 10
-Δv:         8,570 m/s
-Mass ratio: 10.00
+Δv:         8,581 m/s
+Mass ratio: 10.000
 ```
 
 ### Quick Calculations
@@ -207,40 +207,47 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json |
 
 ## Real Rocket Approximations
 
+These use each stage's real propellant load and the structural ratios in the
+reference table on `Stage` (structure excluding engines, over propellant), so
+the dry masses land on the published figures: 22.2 t, 4.0 t and 131 t. The
+delta-v is each stage on its own, in vacuum, carrying nothing. Stacked, and
+with the booster's Isp averaged over its climb through the air, Falcon 9's
+two stages give about 9,400 m/s (`cargo run --example falcon9`).
+
 ### Falcon 9 First Stage
 
 ```bash
-$ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 411000 --structural-ratio 0.054
+$ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 411000 --structural-ratio 0.044
 Engine:     Merlin-1D (×9)
 Propellant: 411,000 kg (LOX/RP-1)
-Dry mass:   26,424 kg
-Δv:         8,527 m/s
-Burn time:  2m 31s
-TWR (vac):  1.97
+Dry mass:   22,314 kg
+Δv:         9,047 m/s
+Burn time:  2m 32s
+TWR (vac):  1.94
 ```
 
 ### Falcon 9 Second Stage
 
 ```bash
-$ tsi calculate --engine merlin-vacuum --propellant-mass 111500 --structural-ratio 0.036
+$ tsi calculate --engine merlin-vacuum --propellant-mass 111500 --structural-ratio 0.032
 Engine:     Merlin-Vacuum
 Propellant: 111,500 kg (LOX/RP-1)
-Dry mass:   4,484 kg
-Δv:         11,140 m/s
-Burn time:  6m 27s
-TWR (vac):  2.23
+Dry mass:   4,038 kg
+Δv:         11,446 m/s
+Burn time:  6m 28s
+TWR (vac):  0.87
 ```
 
 ### Saturn V S-IC (First Stage)
 
 ```bash
-$ tsi calculate --engine f-1 --engine-count 5 --propellant-mass 2160000 --structural-ratio 0.06
+$ tsi calculate --engine f-1 --engine-count 5 --propellant-mass 2160000 --structural-ratio 0.041
 Engine:     F-1 (×5)
 Propellant: 2,160,000 kg (LOX/RP-1)
-Dry mass:   171,600 kg
-Δv:         7,550 m/s
-Burn time:  2m 27s
-TWR (vac):  2.33
+Dry mass:   130,560 kg
+Δv:         8,540 m/s
+Burn time:  2m 46s
+TWR (vac):  1.73
 ```
 
 ## Scripting Examples
@@ -312,10 +319,10 @@ Lower structural ratios dramatically improve delta-v:
 
 ```bash
 $ tsi calculate --engine raptor-2 --propellant-mass 100000 --structural-ratio 0.05
-Δv:         8,570 m/s
+Δv:         9,549 m/s
 
 $ tsi calculate --engine raptor-2 --propellant-mass 100000 --structural-ratio 0.15
-Δv:         7,036 m/s
+Δv:         6,691 m/s
 ```
 
-A 10% difference in structural ratio yields ~1,500 m/s difference in delta-v.
+Going from 5% to 15% structure costs almost 2,900 m/s: a third of the way to orbit.

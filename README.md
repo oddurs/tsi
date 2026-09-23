@@ -51,8 +51,8 @@ TWR (vac):  2.24
 
 # Using manual parameters
 $ tsi calculate --isp 350 --mass-ratio 8.0
-Δv:         7,127 m/s
-Mass ratio: 8.00
+Δv:         7,137 m/s
+Mass ratio: 8.000
 ```
 
 ### List available engines
@@ -196,17 +196,24 @@ Includes 11 real rocket engines:
 
 ## Examples
 
-### Falcon 9 first stage approximation
+### Falcon 9 first stage
+
+Real propellant load, and a structural ratio (structure excluding engines,
+over propellant) of 4.4%, which lands on the real 22.2 t dry mass:
 
 ```bash
-$ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 400000
+$ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 411000 --structural-ratio 0.044
 Engine:     Merlin-1D (×9)
-Propellant: 400,000 kg (LOX/RP-1)
-Dry mass:   44,230 kg
-Δv:         7,036 m/s
-Burn time:  2m 28s
-TWR (vac):  1.89
+Propellant: 411,000 kg (LOX/RP-1)
+Dry mass:   22,314 kg
+Δv:         9,047 m/s
+Burn time:  2m 32s
+TWR (vac):  1.94
 ```
+
+That is the stage on its own, in vacuum. Carrying the second stage and 22.8 t
+of payload from sea level, it delivers about 3,800 m/s
+(`cargo run --example falcon9`).
 
 ### Parameter sweep
 
@@ -323,7 +330,9 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
 - [Command Reference](docs/commands.md)
 - [Engine Database](docs/engines.md)
 - [Physics Reference](docs/physics.md)
-- [Examples](docs/examples.md)
+- [Examples](docs/examples.md) and runnable [example programs](examples/)
+- [Architecture](docs/plan/architecture.md) and [testing](docs/plan/testing.md), for contributors
+- [CHANGELOG](CHANGELOG.md), including the 0.7 to 0.8 migration table
 
 ## Roadmap
 

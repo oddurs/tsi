@@ -14,11 +14,11 @@ These are the essentials — already planned for the initial release.
 
 | Crate | Purpose | Status | Notes |
 |-------|---------|--------|-------|
-| `clap` | Argument parsing | ✅ v0.1 | Derive macros, completions, excellent help generation |
+| `clap` | Argument parsing | ✅ v0.1 | CLI only since v0.8 (`cli` feature) |
 | `serde` | Serialization | ✅ v0.1 | JSON/TOML for config and output |
-| `serde_json` | JSON output | ✅ v0.2 | Pretty-printed and machine-readable output |
+| `serde_json` | JSON output | ✅ v0.2 | CLI only since v0.8 (`cli` feature) |
 | `toml` | Config files | ✅ v0.2 | Engine database format |
-| `anyhow` | Error handling | ✅ v0.1 | Convenient error propagation in binaries |
+| `anyhow` | Error handling | ✅ v0.1 | CLI only since v0.8; the library uses `thiserror` enums |
 | `thiserror` | Error types | ✅ v0.1 | Derive Error for library types |
 | `num-format` | Number formatting | ⏳ | Thousands separators are hand-rolled in `units/fmt.rs` today |
 
@@ -317,8 +317,8 @@ Tiny inline charts: `▁▂▃▄▅▆▇█`
 | `assert_cmd` | CLI testing | ✅ v0.2 | Integration tests for commands, 37 tests |
 | `predicates` | Test assertions | ✅ v0.2 | String matching for CLI output |
 | `approx` | Float comparisons | ⏳ | Safe epsilon comparisons |
-| `criterion` | Benchmarking | ⏳ | Statistical benchmarks |
-| `insta` | Snapshot testing | ⏳ | CLI output regression testing |
+| `criterion` | Benchmarking | ✅ v0.8 | Optimizer and Monte Carlo benchmarks |
+| `insta` | Snapshot testing | ✅ v0.8 | JSON output snapshots |
 
 ### `proptest` — Property-Based Testing ✅
 ```toml

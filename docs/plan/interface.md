@@ -1,5 +1,10 @@
 # tsi — Interface Design
 
+> **Design document.** These are the interface principles tsi was built on,
+> and they still hold. For the commands and flags as they are today, see the
+> [command reference](../commands.md); for how the CLI sits on the library,
+> see [architecture.md](architecture.md).
+
 ## Philosophy
 
 `tsi` is a CLI tool. The interface is text — arguments in, formatted output out. But "just text" doesn't mean "no design." Good CLI UX is the difference between a tool people reach for and one they forget exists.

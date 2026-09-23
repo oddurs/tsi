@@ -1,18 +1,25 @@
 # tsi Documentation
 
+> **Planning document.** The documentation plan from the first releases. The
+> status table below is kept current; the rest is the original plan.
+
 ## Implementation Status
 
 | Documentation Type | Status | Notes |
 |-------------------|--------|-------|
 | README.md | ✅ Complete | Quick start, examples, installation |
 | CLI --help | ✅ Complete | All commands documented |
-| API docs (rustdoc) | ✅ Complete | Educational comments added to all modules |
-| Doc tests | ✅ Complete | 16 doc tests, all passing |
+| API docs (rustdoc) | ✅ Complete | Crate docs open with the rocket equation; theory lives on the public types |
+| Doc tests | ✅ Complete | 36 doc tests, none ignored |
 | CHANGELOG.md | ✅ Complete | Follows Keep a Changelog format |
 | docs/getting-started.md | ✅ Complete | User guide |
 | docs/commands.md | ✅ Complete | CLI reference |
 | docs/engines.md | ✅ Complete | Engine database reference |
-| docs/physics.md | ✅ Complete | Physics background |
+| docs/physics.md | ✅ Complete | Physics background, optimal staging, where ideal theory stops |
+| examples/ | ✅ Complete | Five runnable stories, run in CI (v0.8) |
+| JSON schema | ✅ Complete | Schema version 1 in docs/commands.md (v0.8) |
+| docs/plan/architecture.md | ✅ Current | Rewritten for v0.8 |
+| docs/plan/testing.md | ✅ Current | Rewritten for v0.8 |
 | docs/examples.md | ✅ Complete | Usage examples |
 | CONTRIBUTING.md | ⏳ Planned | Contributor guide |
 
