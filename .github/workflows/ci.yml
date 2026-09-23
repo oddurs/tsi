@@ -131,8 +131,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          key: cairn-v0.2.1
-      - run: cargo install --git https://github.com/oddurs/cairn --tag v0.2.1 --locked cairn
+          key: cairn-v0.2.2
+      # The package is cairn-md; the binary it installs is cairn
+      - run: cargo install --git https://github.com/oddurs/cairn --tag v0.2.2 --locked cairn-md
       - run: cairn check
       # ROADMAP.md is generated; fail if someone edited items without re-rendering
       - run: cairn render -q && git diff --exit-code ROADMAP.md
