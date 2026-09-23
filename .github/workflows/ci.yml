@@ -4,12 +4,33 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+# A new push to a PR cancels its older run; main runs are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
 jobs:
+  # The PR title becomes the squash commit on main, so it follows the same
+  # conventional-commit format the commit-msg hook enforces locally.
+  pr-title:
+    name: PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "$TITLE" | grep -Eq '^(feat|fix|docs|chore|refactor|perf|test|ci|build|style|revert)(\([a-z0-9._/-]+\))?!?: .+' || {
+            echo "::error::PR title must be 'type(scope): summary', got: $TITLE"
+            exit 1
+          }
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -115,3 +136,19 @@ jobs:
       - run: cairn check
       # ROADMAP.md is generated; fail if someone edited items without re-rendering
       - run: cairn render -q && git diff --exit-code ROADMAP.md
+
+  # The one required check for branch protection: green only when every job
+  # above passed (or was skipped, like the PR-title job on pushes to main).
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [pr-title, fmt, clippy, test, library, examples, docs, msrv, roadmap]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
