@@ -55,8 +55,8 @@ use super::G0;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::{Force, Mass};
-/// use tsi::physics::{twr, G0};
+/// use tsiolkovsky::units::{Force, Mass};
+/// use tsiolkovsky::physics::{twr, G0};
 ///
 /// // Falcon 9 at liftoff: 9 Merlin engines, 549 tonnes total mass
 /// let thrust = Force::newtons(9.0 * 845_000.0); // ~7.6 MN
@@ -105,8 +105,8 @@ pub fn twr(thrust: Force, mass: Mass, gravity: f64) -> Ratio {
 /// # Examples
 ///
 /// ```
-/// use tsi::units::{Force, Isp, Mass};
-/// use tsi::physics::burn_time;
+/// use tsiolkovsky::units::{Force, Isp, Mass};
+/// use tsiolkovsky::physics::burn_time;
 ///
 /// // Merlin-1D: 845 kN thrust, 311s Isp, 45 tonnes propellant
 /// let time = burn_time(

@@ -22,9 +22,9 @@
 //! # Example
 //!
 //! ```
-//! use tsi::optimizer::{Problem, Constraints};
-//! use tsi::engine::EngineDatabase;
-//! use tsi::units::{Mass, Velocity, Ratio};
+//! use tsiolkovsky::optimizer::{Problem, Constraints};
+//! use tsiolkovsky::engine::EngineDatabase;
+//! use tsiolkovsky::units::{Mass, Velocity, Ratio};
 //!
 //! let db = EngineDatabase::load_embedded().expect("failed to load database");
 //! let raptor = db.get("raptor-2").expect("engine not found");

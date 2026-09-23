@@ -9,11 +9,11 @@
 //! - Encyclopedia Astronautica
 
 use approx::assert_relative_eq;
-use tsi::engine::{Engine, EngineDatabase, Propellant};
-use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
-use tsi::physics::{burn_time, delta_v, twr, IspModel, G0};
-use tsi::stage::{Rocket, Stage};
-use tsi::units::{Force, Isp, Mass, Ratio, Velocity};
+use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
+use tsiolkovsky::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+use tsiolkovsky::physics::{burn_time, delta_v, twr, IspModel, G0};
+use tsiolkovsky::stage::{Rocket, Stage};
+use tsiolkovsky::units::{Force, Isp, Mass, Ratio, Velocity};
 
 /// Saturn V first stage (S-IC) - 5x F-1 engines
 ///

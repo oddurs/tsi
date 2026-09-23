@@ -40,7 +40,7 @@ use std::ops::Mul;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::Isp;
+/// use tsiolkovsky::units::Isp;
 ///
 /// let merlin_sl = Isp::seconds(282.0);  // Merlin at sea level
 /// let merlin_vac = Isp::seconds(311.0); // Merlin in vacuum

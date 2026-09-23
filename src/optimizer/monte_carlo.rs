@@ -137,9 +137,9 @@ impl MonteCarloResults {
     /// # Example
     ///
     /// ```
-    /// # use tsi::engine::EngineDatabase;
-    /// # use tsi::optimizer::{Constraints, MonteCarloRunner, Problem, Uncertainty};
-    /// # use tsi::units::{Mass, Velocity};
+    /// # use tsiolkovsky::engine::EngineDatabase;
+    /// # use tsiolkovsky::optimizer::{Constraints, MonteCarloRunner, Problem, Uncertainty};
+    /// # use tsiolkovsky::units::{Mass, Velocity};
     /// # let db = EngineDatabase::load_embedded().unwrap();
     /// # let problem = Problem::new(
     /// #     Mass::kg(5_000.0),
@@ -344,9 +344,9 @@ fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
 /// # Example
 ///
 /// ```
-/// use tsi::optimizer::{Problem, Constraints, Uncertainty, MonteCarloRunner};
-/// use tsi::engine::EngineDatabase;
-/// use tsi::units::{Mass, Ratio, Velocity};
+/// use tsiolkovsky::optimizer::{Problem, Constraints, Uncertainty, MonteCarloRunner};
+/// use tsiolkovsky::engine::EngineDatabase;
+/// use tsiolkovsky::units::{Mass, Ratio, Velocity};
 ///
 /// let db = EngineDatabase::load_embedded().expect("load db");
 /// let engine = db.get("raptor-2").expect("engine");

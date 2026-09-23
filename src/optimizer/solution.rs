@@ -35,9 +35,9 @@ pub(crate) const DELTA_V_TOLERANCE_MPS: f64 = 1e-3;
 /// # Example
 ///
 /// ```
-/// # use tsi::engine::EngineDatabase;
-/// # use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
-/// # use tsi::units::{Mass, Velocity};
+/// # use tsiolkovsky::engine::EngineDatabase;
+/// # use tsiolkovsky::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+/// # use tsiolkovsky::units::{Mass, Velocity};
 /// # let db = EngineDatabase::load_embedded().unwrap();
 /// # let problem = Problem::new(
 /// #     Mass::kg(5_000.0),
@@ -45,7 +45,7 @@ pub(crate) const DELTA_V_TOLERANCE_MPS: f64 = 1e-3;
 /// #     vec![db.get("raptor-2").unwrap().clone()],
 /// #     Constraints::default(),
 /// # );
-/// use tsi::optimizer::Solution;
+/// use tsiolkovsky::optimizer::Solution;
 ///
 /// let optimizer = AnalyticalOptimizer;
 /// let solution: Solution = optimizer.optimize(&problem).unwrap();

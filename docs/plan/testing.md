@@ -384,8 +384,8 @@ fn version_displays() {
 
 ```rust
 // tests/optimizer.rs
-use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-use tsi::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Optimizer};
+use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+use tsiolkovsky::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Optimizer};
 
 #[test]
 fn analytical_optimizer_finds_solution() {
@@ -472,8 +472,8 @@ Using `proptest` for generative testing.
 ```rust
 // tests/properties.rs
 use proptest::prelude::*;
-use tsi::{Mass, Velocity, Isp, Ratio};
-use tsi::physics::{delta_v, required_mass_ratio};
+use tsiolkovsky::{Mass, Velocity, Isp, Ratio};
+use tsiolkovsky::physics::{delta_v, required_mass_ratio};
 
 proptest! {
     /// Mass addition is commutative
@@ -589,8 +589,8 @@ Compare against known real-world rockets.
 
 ```rust
 // tests/validation.rs
-use tsi::{Mass, Velocity, Isp, Ratio};
-use tsi::physics::delta_v;
+use tsiolkovsky::{Mass, Velocity, Isp, Ratio};
+use tsiolkovsky::physics::delta_v;
 use approx::assert_relative_eq;
 
 /// Saturn V first stage (S-IC) approximate values
@@ -774,8 +774,8 @@ fn regression_empty_engine_list() {
 ```rust
 // benches/optimizer_bench.rs
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-use tsi::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Optimizer};
+use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+use tsiolkovsky::optimizer::{AnalyticalOptimizer, BruteForceOptimizer, Optimizer};
 
 fn optimizer_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("optimizer");

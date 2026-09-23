@@ -33,9 +33,9 @@
 //! # Example
 //!
 //! ```
-//! use tsi::stage::{Stage, Rocket};
-//! use tsi::engine::EngineDatabase;
-//! use tsi::units::Mass;
+//! use tsiolkovsky::stage::{Stage, Rocket};
+//! use tsiolkovsky::engine::EngineDatabase;
+//! use tsiolkovsky::units::Mass;
 //!
 //! let db = EngineDatabase::load_embedded().expect("failed to load database");
 //! let raptor = db.get("raptor-2").expect("engine not found");

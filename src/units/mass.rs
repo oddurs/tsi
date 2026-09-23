@@ -26,7 +26,7 @@ use super::Ratio;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::Mass;
+/// use tsiolkovsky::units::Mass;
 ///
 /// // Falcon 9 first stage masses
 /// let propellant = Mass::kg(411_000.0);

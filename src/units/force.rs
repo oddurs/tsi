@@ -36,7 +36,7 @@ use super::fmt::format_thousands_f64;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::Force;
+/// use tsiolkovsky::units::Force;
 ///
 /// // Single Raptor-2 engine
 /// let raptor = Force::kilonewtons(2_450.0);

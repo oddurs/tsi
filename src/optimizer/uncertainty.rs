@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```
-//! use tsi::optimizer::Uncertainty;
+//! use tsiolkovsky::optimizer::Uncertainty;
 //!
 //! // Typical uncertainties for a well-characterized engine
 //! let uncertainty = Uncertainty::default();
@@ -142,8 +142,8 @@ impl Uncertainty {
 /// # Example
 ///
 /// ```
-/// use tsi::optimizer::{Uncertainty, ParameterSampler};
-/// use tsi::units::Isp;
+/// use tsiolkovsky::optimizer::{Uncertainty, ParameterSampler};
+/// use tsiolkovsky::units::Isp;
 ///
 /// let sampler = ParameterSampler::new(Uncertainty::default());
 /// let nominal_isp = Isp::seconds(350.0);

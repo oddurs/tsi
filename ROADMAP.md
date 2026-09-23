@@ -71,7 +71,6 @@ The vehicle is assembled: a library that can be depended on.
 
 ### backlog
 
-- [ ] [`0023`](https://github.com/oddurs/tsi/blob/main/cairn/items/0023-rename-the-crate-to-tsiolkovsky-keep-the-binary-as-tsi.md) Rename the crate to tsiolkovsky; keep the binary as tsi <sup>chore · p0 · s · infra</sup>
 - [ ] [`0024`](https://github.com/oddurs/tsi/blob/main/cairn/items/0024-feature-gate-the-cli-so-the-library-carries-no-clap.md) Feature-gate the CLI so the library carries no clap <sup>feature · p0 · l · cli</sup>
 - [ ] [`0025`](https://github.com/oddurs/tsi/blob/main/cairn/items/0025-the-library-never-prints-progress-through-an-observer.md) The library never prints: progress through an observer <sup>feature · p0 · m · optimizer</sup>
 - [ ] [`0026`](https://github.com/oddurs/tsi/blob/main/cairn/items/0026-typed-errors-with-structured-infeasibility-reasons.md) Typed errors with structured infeasibility reasons <sup>feature · p0 · m · optimizer</sup>
@@ -83,6 +82,10 @@ The vehicle is assembled: a library that can be depended on.
 - [ ] [`0032`](https://github.com/oddurs/tsi/blob/main/cairn/items/0032-loss-models-use-velocity-share-g0-and-cover-every-stage.md) Loss models use Velocity, share G0, and cover every stage <sup>chore · p2 · s · physics</sup>
 - [ ] [`0033`](https://github.com/oddurs/tsi/blob/main/cairn/items/0033-runnable-examples-that-narrate-real-rockets.md) Runnable examples/ that narrate real rockets <sup>docs · p1 · m · docs</sup>
 - [ ] [`0034`](https://github.com/oddurs/tsi/blob/main/cairn/items/0034-real-criterion-benchmarks-for-the-optimizers.md) Real criterion benchmarks for the optimizers <sup>chore · p2 · s · infra</sup>
+
+### in progress
+
+- [ ] [`0023`](https://github.com/oddurs/tsi/blob/main/cairn/items/0023-rename-the-crate-to-tsiolkovsky-keep-the-binary-as-tsi.md) Rename the crate to tsiolkovsky; keep the binary as tsi <sup>chore · p0 · s · infra</sup>
 
 ## v0.9 — Wet dress
 

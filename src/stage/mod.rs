@@ -21,9 +21,9 @@
 //! # Example: Single Stage
 //!
 //! ```
-//! use tsi::stage::Stage;
-//! use tsi::engine::EngineDatabase;
-//! use tsi::units::Mass;
+//! use tsiolkovsky::stage::Stage;
+//! use tsiolkovsky::engine::EngineDatabase;
+//! use tsiolkovsky::units::Mass;
 //!
 //! let db = EngineDatabase::load_embedded().expect("failed to load database");
 //! let merlin = db.get("merlin-1d").expect("engine not found");
@@ -43,9 +43,9 @@
 //! # Example: Two-Stage Rocket
 //!
 //! ```
-//! use tsi::stage::{Stage, Rocket};
-//! use tsi::engine::EngineDatabase;
-//! use tsi::units::Mass;
+//! use tsiolkovsky::stage::{Stage, Rocket};
+//! use tsiolkovsky::engine::EngineDatabase;
+//! use tsiolkovsky::units::Mass;
 //!
 //! let db = EngineDatabase::load_embedded().expect("failed to load database");
 //! let merlin = db.get("merlin-1d").expect("engine not found");

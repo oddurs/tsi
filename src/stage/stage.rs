@@ -45,9 +45,9 @@ use crate::units::{Force, Isp, Mass, Ratio, Time, Velocity};
 /// # Examples
 ///
 /// ```
-/// use tsi::stage::Stage;
-/// use tsi::engine::EngineDatabase;
-/// use tsi::units::Mass;
+/// use tsiolkovsky::stage::Stage;
+/// use tsiolkovsky::engine::EngineDatabase;
+/// use tsiolkovsky::units::Mass;
 ///
 /// let db = EngineDatabase::load_embedded().expect("failed to load database");
 /// let raptor = db.get("raptor-2").expect("engine not found");

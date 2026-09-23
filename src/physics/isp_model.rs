@@ -77,8 +77,8 @@ pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.2;
 /// # Example
 ///
 /// ```
-/// use tsi::engine::EngineDatabase;
-/// use tsi::physics::IspModel;
+/// use tsiolkovsky::engine::EngineDatabase;
+/// use tsiolkovsky::physics::IspModel;
 ///
 /// let db = EngineDatabase::load_embedded().expect("failed to load database");
 /// let merlin = db.get("merlin-1d").expect("engine not found");

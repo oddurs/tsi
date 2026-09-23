@@ -146,8 +146,8 @@ See `tsi engines --verbose` for the full list.
 ## As a Library
 
 ```rust
-use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-use tsi::optimizer::{BruteForceOptimizer, Optimizer};
+use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+use tsiolkovsky::optimizer::{BruteForceOptimizer, Optimizer};
 
 let problem = Problem {
     payload: Mass::kg(5000.0),
@@ -322,8 +322,8 @@ Every public item needs documentation. Use `#![warn(missing_docs)]` in lib.rs to
 //! ## Quick Start
 //!
 //! ```rust
-//! use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-//! use tsi::optimizer::{BruteForceOptimizer, Optimizer};
+//! use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+//! use tsiolkovsky::optimizer::{BruteForceOptimizer, Optimizer};
 //!
 //! let problem = Problem {
 //!     payload: Mass::kg(5000.0),
@@ -359,7 +359,7 @@ Every public item needs documentation. Use `#![warn(missing_docs)]` in lib.rs to
 /// # Construction
 ///
 /// ```rust
-/// use tsi::Mass;
+/// use tsiolkovsky::Mass;
 ///
 /// let m1 = Mass::kg(1000.0);
 /// let m2 = Mass::tonnes(1.0);
@@ -369,7 +369,7 @@ Every public item needs documentation. Use `#![warn(missing_docs)]` in lib.rs to
 /// # Arithmetic
 ///
 /// ```rust
-/// use tsi::Mass;
+/// use tsiolkovsky::Mass;
 ///
 /// let wet = Mass::kg(100.0);
 /// let dry = Mass::kg(25.0);
@@ -390,7 +390,7 @@ impl Mass {
     /// # Example
     ///
     /// ```rust
-    /// use tsi::Mass;
+    /// use tsiolkovsky::Mass;
     /// let m = Mass::kg(5000.0);
     /// ```
     pub fn kg(value: f64) -> Self {
@@ -402,7 +402,7 @@ impl Mass {
     /// # Example
     ///
     /// ```rust
-    /// use tsi::Mass;
+    /// use tsiolkovsky::Mass;
     /// let m = Mass::tonnes(5.0);
     /// assert_eq!(m.as_kg(), 5000.0);
     /// ```
@@ -453,8 +453,8 @@ impl Mass {
 /// # Example
 ///
 /// ```rust
-/// use tsi::{Isp, Ratio};
-/// use tsi::physics::delta_v;
+/// use tsiolkovsky::{Isp, Ratio};
+/// use tsiolkovsky::physics::delta_v;
 ///
 /// let isp = Isp::seconds(350.0);
 /// let ratio = Ratio::new(8.0);
@@ -519,8 +519,8 @@ Standalone examples that can be run with `cargo run --example`.
 //!
 //! Run with: cargo run --example basic
 
-use tsi::{Engine, Mass, Velocity, Isp, Ratio};
-use tsi::physics::delta_v;
+use tsiolkovsky::{Engine, Mass, Velocity, Isp, Ratio};
+use tsiolkovsky::physics::delta_v;
 
 fn main() -> anyhow::Result<()> {
     // Calculate delta-v directly
@@ -556,8 +556,8 @@ fn main() -> anyhow::Result<()> {
 //!
 //! Run with: cargo run --example optimize
 
-use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-use tsi::optimizer::{BruteForceOptimizer, Optimizer};
+use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+use tsiolkovsky::optimizer::{BruteForceOptimizer, Optimizer};
 
 fn main() -> anyhow::Result<()> {
     // Define the problem
@@ -607,8 +607,8 @@ fn main() -> anyhow::Result<()> {
 //!
 //! Run with: cargo run --example monte_carlo
 
-use tsi::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
-use tsi::optimizer::{BruteForceOptimizer, MonteCarloRunner, Optimizer};
+use tsiolkovsky::{Engine, Mass, Velocity, Ratio, Problem, Constraints};
+use tsiolkovsky::optimizer::{BruteForceOptimizer, MonteCarloRunner, Optimizer};
 
 fn main() -> anyhow::Result<()> {
     let problem = Problem {

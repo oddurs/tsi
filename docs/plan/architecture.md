@@ -338,7 +338,7 @@ pub struct MonteCarloResult {
 ```rust
 // src/main.rs
 use clap::Parser;
-use tsi::cli::{Cli, Command};
+use tsiolkovsky::cli::{Cli, Command};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();

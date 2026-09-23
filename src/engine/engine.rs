@@ -33,8 +33,8 @@ use super::Propellant;
 /// # Examples
 ///
 /// ```
-/// use tsi::engine::{Engine, Propellant};
-/// use tsi::units::{Force, Isp, Mass};
+/// use tsiolkovsky::engine::{Engine, Propellant};
+/// use tsiolkovsky::units::{Force, Isp, Mass};
 ///
 /// let merlin = Engine::new(
 ///     "Merlin-1D",
@@ -147,8 +147,8 @@ impl Engine {
     /// # Example
     ///
     /// ```
-    /// use tsi::engine::EngineDatabase;
-    /// use tsi::units::Ratio;
+    /// use tsiolkovsky::engine::EngineDatabase;
+    /// use tsiolkovsky::units::Ratio;
     ///
     /// let db = EngineDatabase::load_embedded().expect("failed to load database");
     /// let merlin = db.get("merlin-1d").expect("engine not found");

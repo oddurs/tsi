@@ -64,8 +64,8 @@ use super::G0;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::{Isp, Ratio};
-/// use tsi::physics::delta_v;
+/// use tsiolkovsky::units::{Isp, Ratio};
+/// use tsiolkovsky::physics::delta_v;
 ///
 /// // A stage with Isp 350s and mass ratio 8 (87.5% propellant)
 /// let dv = delta_v(Isp::seconds(350.0), Ratio::new(8.0));
@@ -109,8 +109,8 @@ pub fn delta_v(isp: Isp, mass_ratio: Ratio) -> Velocity {
 /// # Examples
 ///
 /// ```
-/// use tsi::units::{Isp, Velocity};
-/// use tsi::physics::required_mass_ratio;
+/// use tsiolkovsky::units::{Isp, Velocity};
+/// use tsiolkovsky::physics::required_mass_ratio;
 ///
 /// // What mass ratio do we need for 3,000 m/s with a 350s Isp engine?
 /// let ratio = required_mass_ratio(Velocity::mps(3000.0), Isp::seconds(350.0));

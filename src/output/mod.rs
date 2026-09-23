@@ -8,9 +8,9 @@
 //! # Example
 //!
 //! ```
-//! # use tsi::engine::EngineDatabase;
-//! # use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
-//! # use tsi::units::{Mass, Velocity};
+//! # use tsiolkovsky::engine::EngineDatabase;
+//! # use tsiolkovsky::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+//! # use tsiolkovsky::units::{Mass, Velocity};
 //! # let db = EngineDatabase::load_embedded().unwrap();
 //! # let problem = Problem::new(
 //! #     Mass::kg(5_000.0),
@@ -18,7 +18,7 @@
 //! #     vec![db.get("raptor-2").unwrap().clone()],
 //! #     Constraints::default(),
 //! # );
-//! use tsi::output::terminal;
+//! use tsiolkovsky::output::terminal;
 //!
 //! let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
 //! terminal::print_solution(&solution);

@@ -20,7 +20,7 @@
 //! These types prevent common errors like adding mass to velocity:
 //!
 //! ```compile_fail
-//! use tsi::units::{Mass, Velocity};
+//! use tsiolkovsky::units::{Mass, Velocity};
 //!
 //! let mass = Mass::kg(1000.0);
 //! let velocity = Velocity::mps(3000.0);
@@ -30,7 +30,7 @@
 //! But meaningful operations are allowed:
 //!
 //! ```
-//! use tsi::units::Mass;
+//! use tsiolkovsky::units::Mass;
 //!
 //! let wet = Mass::kg(10000.0);
 //! let dry = Mass::kg(2000.0);

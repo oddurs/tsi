@@ -24,8 +24,8 @@
 //! # Example
 //!
 //! ```
-//! use tsi::physics::losses::{gravity_loss, drag_loss, total_losses, LossEstimate};
-//! use tsi::units::{Mass, Force, Time, Ratio};
+//! use tsiolkovsky::physics::losses::{gravity_loss, drag_loss, total_losses, LossEstimate};
+//! use tsiolkovsky::units::{Mass, Force, Time, Ratio};
 //!
 //! // First stage: 200s burn, TWR 1.3
 //! let burn_time = Time::seconds(200.0);
@@ -111,8 +111,8 @@ impl LossEstimate {
 /// # Example
 ///
 /// ```
-/// use tsi::physics::losses::gravity_loss;
-/// use tsi::units::{Time, Ratio};
+/// use tsiolkovsky::physics::losses::gravity_loss;
+/// use tsiolkovsky::units::{Time, Ratio};
 ///
 /// let burn = Time::seconds(150.0);
 /// let twr = Ratio::new(1.3);
@@ -214,8 +214,8 @@ pub fn steering_loss(_burn_time: Time) -> f64 {
 /// # Example
 ///
 /// ```
-/// use tsi::physics::losses::total_losses;
-/// use tsi::units::{Time, Ratio};
+/// use tsiolkovsky::physics::losses::total_losses;
+/// use tsiolkovsky::units::{Time, Ratio};
 ///
 /// let burn = Time::seconds(170.0);  // Falcon 9 first stage
 /// let twr = Ratio::new(1.28);       // F9 liftoff TWR

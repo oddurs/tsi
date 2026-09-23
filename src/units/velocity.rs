@@ -28,7 +28,7 @@ use super::fmt::format_thousands_f64;
 /// # Examples
 ///
 /// ```
-/// use tsi::units::Velocity;
+/// use tsiolkovsky::units::Velocity;
 ///
 /// // Falcon 9 stage 1 delta-v
 /// let stage1_dv = Velocity::mps(8_500.0);

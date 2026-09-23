@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-use tsi::cli::{commands, Cli, Command};
+use tsiolkovsky::cli::{commands, Cli, Command};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

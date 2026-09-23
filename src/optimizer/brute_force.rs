@@ -54,9 +54,9 @@ const COARSE_ATTEMPTS: u32 = 4;
 /// # Example
 ///
 /// ```
-/// use tsi::optimizer::{BruteForceOptimizer, Problem, Constraints, Optimizer};
-/// use tsi::engine::EngineDatabase;
-/// use tsi::units::{Mass, Velocity};
+/// use tsiolkovsky::optimizer::{BruteForceOptimizer, Problem, Constraints, Optimizer};
+/// use tsiolkovsky::engine::EngineDatabase;
+/// use tsiolkovsky::units::{Mass, Velocity};
 ///
 /// let db = EngineDatabase::load_embedded().expect("failed to load database");
 /// let raptor = db.get("raptor-2").expect("engine not found");

@@ -6,13 +6,13 @@
 use proptest::prelude::*;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use tsi::engine::{Engine, EngineDatabase};
-use tsi::optimizer::{
+use tsiolkovsky::engine::{Engine, EngineDatabase};
+use tsiolkovsky::optimizer::{
     AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer,
     ParameterSampler, Problem, Solution, Uncertainty,
 };
-use tsi::physics::{delta_v, required_mass_ratio};
-use tsi::units::{Isp, Mass, Ratio, Velocity};
+use tsiolkovsky::physics::{delta_v, required_mass_ratio};
+use tsiolkovsky::units::{Isp, Mass, Ratio, Velocity};
 
 proptest! {
     /// Mass addition is commutative: a + b = b + a

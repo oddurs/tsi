@@ -20,7 +20,7 @@
 //! # Example
 //!
 //! ```
-//! use tsi::engine::EngineDatabase;
+//! use tsiolkovsky::engine::EngineDatabase;
 //!
 //! let db = EngineDatabase::load_embedded().expect("failed to load database");
 //! let raptor = db.get("raptor-2").expect("engine not found");

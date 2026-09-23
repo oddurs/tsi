@@ -17,8 +17,8 @@
 //! # Example: Analyzing a Rocket Stage
 //!
 //! ```
-//! use tsi::physics::{delta_v, twr, burn_time, G0};
-//! use tsi::units::{Mass, Force, Isp, Ratio};
+//! use tsiolkovsky::physics::{delta_v, twr, burn_time, G0};
+//! use tsiolkovsky::units::{Mass, Force, Isp, Ratio};
 //!
 //! // Define a stage: 100 tonnes propellant, 10 tonnes dry mass
 //! let propellant = Mass::kg(100_000.0);

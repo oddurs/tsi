@@ -30,8 +30,9 @@ git clone https://github.com/oddurs/tsi.git
 cd tsi
 cargo install --path .
 
-# Or from crates.io (when published)
-cargo install tsi
+# Or from crates.io (when published). The crate is `tsiolkovsky`;
+# the command it installs is `tsi`.
+cargo install tsiolkovsky
 ```
 
 ## Quick Start
