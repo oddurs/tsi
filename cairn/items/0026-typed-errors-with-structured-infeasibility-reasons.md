@@ -2,12 +2,12 @@
 id: 26
 title: Typed errors with structured infeasibility reasons
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p0
 effort: m
 area: optimizer
@@ -27,6 +27,6 @@ turns causes into advice. `anyhow` becomes a `cli`-only dependency.
 
 ## Acceptance criteria
 
-- [ ] No `anyhow` outside the `cli` feature
-- [ ] Every CLI suggestion is derived from a structured cause
-- [ ] Error enums are `#[non_exhaustive]`
+- [x] No `anyhow` outside the `cli` feature
+- [x] Every CLI suggestion is derived from a structured cause
+- [x] Error enums are `#[non_exhaustive]`

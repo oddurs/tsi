@@ -2,12 +2,12 @@
 id: 30
 title: Per-stage structural ratio, with the textbook definition
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p1
 effort: m
 area: stage
@@ -28,6 +28,6 @@ Per-stage ε, named for what it is. Either adopt the textbook ε or rename the c
 
 ## Acceptance criteria
 
-- [ ] Naming and definition match the documentation exactly
-- [ ] `--structural-ratio` accepts per-stage values (`0.06,0.09`)
-- [ ] Reference table in rustdoc with sources
+- [x] Naming and definition match the documentation exactly
+- [x] `--structural-ratio` accepts per-stage values (`0.06,0.09`)
+- [x] Reference table in rustdoc with sources

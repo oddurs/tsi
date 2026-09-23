@@ -2,14 +2,14 @@
 id: 24
 title: Feature-gate the CLI so the library carries no clap
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 depends_on:
 - 23
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p0
 effort: l
 area: cli
@@ -28,6 +28,6 @@ A default-on `cli` feature owns `clap*`, the terminal/diagram formatters, and `m
 
 ## Acceptance criteria
 
-- [ ] `cargo build --no-default-features` compiles without clap in `cargo tree`
-- [ ] CI builds both feature sets
-- [ ] `cargo install tsiolkovsky` still installs `tsi`
+- [x] `cargo build --no-default-features` compiles without clap in `cargo tree`
+- [x] CI builds both feature sets
+- [x] `cargo install tsiolkovsky` still installs `tsi`

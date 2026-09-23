@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-23 — Stacking
+
+tsi is now a library with a command-line tool on top, rather than the
+other way round. The crate is called **`tsiolkovsky`** (`tsi` was taken on
+crates.io); the command it installs is still `tsi`. Almost every breaking
+change planned before 1.0 lands here, so that 0.9 and 1.0 can be additive.
+
+The `tsi` command's behaviour and output are unchanged, apart from new
+fields in its JSON.
+
+### Migrating from 0.7
+
+| 0.7 | 0.8 |
+|-----|-----|
+| `use tsi::...` | `use tsiolkovsky::...`, or `use tsiolkovsky::prelude::*` |
+| `Problem::new(payload, dv, engines, constraints).with_stage_count(2)` | `Problem::builder().payload(..).target(..).engines(..).constraints(..).stages(2).build()?` |
+| `.with_pinned_engine(i, e)` | `.pin(i, e)` on the builder |
+| `Constraints::new(twr, upper_twr, stages, ratio)` | `Constraints::default().with_min_liftoff_twr(..).with_min_stage_twr(..)...` |
+| `problem.constraints.margin = ..` | build a new problem, or `problem.to_builder()` |
+| `solution.rocket`, `.margin`, `.iterations` | `solution.rocket()`, `.margin()`, `.iterations()` |
+| `solution.optimizer_name` | `solution.optimizer()` (an `OptimizerKind`) |
+| `solution.margin_percent(target)` | `solution.margin_percent()` |
+| `engine.name`, `engine.propellant` | `engine.name()`, `engine.propellant()` |
+| `Engine::new(..)`, `Stage::new(..)`, `Rocket::new(..)` | the same, returning `Result` |
+| `EngineDatabase::default()` | `EngineDatabase::builtin()` (a shared reference, parsed once) |
+| `OptimizeError::Infeasible { reason }` | `OptimizeError::Infeasible(Infeasibility)` |
+| `BruteForceOptimizer::default().with_progress(true)` | `.with_progress(your_observer)`; the default is silent |
+| `MonteCarloRunner::run_design` → results | → `Result<MonteCarloResults, UncertaintyError>` |
+| `Uncertainty { isp_percent: .., .. }` | `Uncertainty::default().with_isp_percent(..)`, or `low()` / `high()` |
+| `ParameterSampler` | no longer public |
+| `tsi::cli`, `tsi::output` | part of the binary, not the library |
+
+### Added
+
+- **Library without the CLI**: `default-features = false` drops clap,
+  anyhow and serde_json. (#24)
+- `tsiolkovsky::prelude`, and crate-level documentation that starts with the
+  rocket equation. (#29)
+- `Problem::builder()` validates everything on `build()`, so a `Problem` is
+  always valid; `Problem::to_builder()` makes variations. (#29)
+- **Per-stage structural ratios**: `Constraints::with_structural_ratios`,
+  and `--structural-ratio 0.04,0.06` on the command line. The definition
+  (structure excluding engines, over propellant) is documented against the
+  textbook structural coefficient, with a table of real stages;
+  `Stage::structural_ratio()` and `Stage::structural_coefficient()` give
+  both. (#30)
+- `Progress`: an observer for long optimizations and Monte Carlo runs. The
+  library never prints. (#25)
+- `Infeasibility`: the constraint that binds, as data. The CLI turns it into
+  advice about flags. (#26)
+- `EngineError`, `StageError`, `RocketError`, `DatabaseError`,
+  `UncertaintyError`. Every error enum is `#[non_exhaustive]`. (#26, #28)
+- Serde: units serialize as plain numbers; `Engine`, `Propellant` and
+  `IspModel` serialize and deserialize (engines are validated on the way
+  in); `Solution` and `MonteCarloResults` serialize as the documented JSON
+  report. `tsi optimize --output json` is built from them and carries
+  `"schema_version": 1`, plus new `structural_mass_kg` and
+  `surface_gravity_mps2` fields. (#31)
+- `physics::losses::ascent_losses(&Rocket)` and `leo_orbital_velocity()`. (#32)
+- Examples that tell stories: `falcon9` (why nine engines),
+  `hydrogen_upper_stage`, `saturn_v_with_raptors`, `monte_carlo` (how much
+  margin is enough), and `quickstart`. (#33)
+- Criterion benchmarks for both optimizers and Monte Carlo. (#34)
+- CI tests the library alone, checks it has no CLI dependencies, and runs
+  every example.
+
+### Changed
+
+- **Breaking:** the crate is renamed `tsiolkovsky`. (#23)
+- **Breaking:** private fields and accessors throughout the optimizer
+  module, `Engine`, and `Uncertainty`; see the migration table. (#28, #29)
+- **Breaking:** constructors validate and return `Result`: engines with sea-
+  level performance better than vacuum, non-positive masses, or zero
+  engines are rejected by name, as are malformed engine files. (#27, #28)
+- **Breaking:** loss estimates are `Velocity`, not `f64`. (#32)
+- `Propellant` and `IspModel` are `#[non_exhaustive]`.
+- The library denies `clippy::unwrap_used` and `clippy::expect_used`.
+
+### Fixed
+
+- Brute-force designs now carry their surface gravity, so their reported
+  TWR is right off Earth (a regression in 0.7's review fixes).
+
+### Removed
+
+- `Uncertainty::new` and `BruteForceOptimizer::with_vacuum_preference`,
+  deprecated in 0.7.
+
 ## [0.7.0] - 2026-09-22 — Static fire
 
 Every number tsi prints was checked against an independent method or a real
@@ -269,7 +357,8 @@ and more honest, so expect different numbers from the same commands.
 - MIT license
 - Validates against Falcon 9 stage parameters
 
-[Unreleased]: https://github.com/oddurs/tsi/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/oddurs/tsi/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/oddurs/tsi/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/oddurs/tsi/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/oddurs/tsi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/oddurs/tsi/compare/v0.4.0...v0.5.0

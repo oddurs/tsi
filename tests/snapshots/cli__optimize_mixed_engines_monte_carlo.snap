@@ -1,0 +1,94 @@
+---
+source: tests/cli.rs
+expression: stable(json)
+---
+{
+  "booster_isp_model": "ascent-averaged",
+  "design_margin_percent": 3.0,
+  "margin_mps": 282.0,
+  "margin_percent": 3.0,
+  "metadata": {
+    "iterations": "[iterations]",
+    "optimizer": "Analytical",
+    "runtime_ms": "[runtime_ms]"
+  },
+  "monte_carlo": {
+    "delta_v": {
+      "max": 9842.05,
+      "mean": 9678.81,
+      "min": 9471.32,
+      "percentile_5": 9566.14,
+      "percentile_50": 9684.67,
+      "percentile_95": 9784.22,
+      "std_dev": 64.4317
+    },
+    "design_stage_count": 3,
+    "design_total_mass_kg": 82010.0,
+    "failures": 0,
+    "mass": {
+      "max": 82555.9,
+      "mean": 82014.3,
+      "min": 81359.9,
+      "percentile_5": 81689.7,
+      "percentile_50": 82022.3,
+      "percentile_95": 82327.2,
+      "std_dev": 194.496
+    },
+    "required_margin_95_mps": 0.0,
+    "runtime_ms": "[runtime_ms]",
+    "seed": 7,
+    "success_probability": 1.0,
+    "successes": 500,
+    "target_delta_v_mps": 9400.0,
+    "total_runs": 500
+  },
+  "payload_fraction": 0.0609682,
+  "payload_kg": 5000.0,
+  "schema_version": 1,
+  "stages": [
+    {
+      "burn_time_s": 66.6872,
+      "delta_v_mps": 2000.0,
+      "dry_mass_kg": 4137.63,
+      "engine": "Merlin-1D",
+      "engine_count": 2,
+      "isp_s": 305.2,
+      "propellant_kg": 39970.3,
+      "stage": 1,
+      "structural_mass_kg": 3197.63,
+      "twr_ignition": 2.27294,
+      "twr_liftoff": 2.10135,
+      "wet_mass_kg": 44108.0
+    },
+    {
+      "burn_time_s": 439.346,
+      "delta_v_mps": 3578.74,
+      "dry_mass_kg": 2057.31,
+      "engine": "RL-10C",
+      "engine_count": 2,
+      "isp_s": 453.0,
+      "propellant_kg": 20966.4,
+      "stage": 2,
+      "structural_mass_kg": 1677.31,
+      "twr_ignition": 0.570365,
+      "wet_mass_kg": 23023.7
+    },
+    {
+      "burn_time_s": 375.956,
+      "delta_v_mps": 4103.26,
+      "dry_mass_kg": 907.652,
+      "engine": "RL-10C",
+      "engine_count": 1,
+      "isp_s": 453.0,
+      "propellant_kg": 8970.65,
+      "stage": 3,
+      "structural_mass_kg": 717.652,
+      "twr_ignition": 0.726494,
+      "wet_mass_kg": 9878.3
+    }
+  ],
+  "surface_gravity_mps2": 9.80665,
+  "target_delta_v_mps": 9400.0,
+  "total_delta_v_mps": 9682.0,
+  "total_mass_kg": 82010.0
+}

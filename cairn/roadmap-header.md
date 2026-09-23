@@ -29,6 +29,7 @@ and each one has to pass before the next begins:
 | v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, confidence intervals |
 | v0.6.0 | 2026-01-16 | ASCII diagrams, completions, custom engines, loss estimates |
 | v0.7.0 | 2026-09-22 | Static fire: correct optimizer and Monte Carlo, ascent Isp, CI |
+| v0.8.0 | 2026-09-23 | Stacking: the `tsiolkovsky` library, builder API, typed errors, serde |
 
 The phase-by-phase plan that got tsi to v0.6 is archived in
 [docs/plan/roadmap-v0.md](docs/plan/roadmap-v0.md).

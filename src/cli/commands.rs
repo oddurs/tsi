@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use anyhow::{bail, Result};
 use clap::CommandFactory;
@@ -9,8 +9,7 @@ use serde::Serialize;
 use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
 use tsiolkovsky::optimizer::{
     AnalyticalOptimizer, BruteForceOptimizer, Constraints, Infeasibility, MonteCarloResults,
-    MonteCarloRunner, MonteCarloSummary, OptimizeError, Optimizer, Problem, Progress,
-    SolutionReport, Uncertainty,
+    MonteCarloRunner, OptimizeError, Optimizer, Problem, Progress, Solution, Uncertainty,
 };
 use tsiolkovsky::physics::losses;
 use tsiolkovsky::physics::{burn_time, delta_v, twr, G0};
@@ -495,8 +494,8 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
             let output = OptimizeJson {
                 schema_version: JSON_SCHEMA_VERSION,
                 design_margin_percent: args.margin * 100.0,
-                solution: solution.report(),
-                monte_carlo: mc_results.as_ref().map(MonteCarloResults::summary),
+                solution: &solution,
+                monte_carlo: mc_results.as_ref(),
             };
             println!("{}", serde_json::to_string_pretty(&output)?);
         }
@@ -511,13 +510,13 @@ const JSON_SCHEMA_VERSION: u32 = 1;
 
 /// The JSON document `tsi optimize --output json` prints.
 #[derive(Serialize)]
-struct OptimizeJson {
+struct OptimizeJson<'a> {
     schema_version: u32,
     design_margin_percent: f64,
     #[serde(flatten)]
-    solution: SolutionReport,
+    solution: &'a Solution,
     #[serde(skip_serializing_if = "Option::is_none")]
-    monte_carlo: Option<MonteCarloSummary>,
+    monte_carlo: Option<&'a MonteCarloResults>,
 }
 
 /// Turn an optimization error into a message with advice about which flags
@@ -585,18 +584,25 @@ fn twr_flag(stage: usize) -> &'static str {
     }
 }
 
-/// Progress on stderr: a phase line, then a percentage that updates in place.
+/// Progress on stderr, in the same shape tsi has always printed: a phase
+/// line and "Searching... NN%" for brute force, "Monte Carlo: NN% (done/total)"
+/// for Monte Carlo.
 #[derive(Default)]
 struct StderrProgress {
     total: AtomicU64,
     shown: AtomicU64,
+    monte_carlo: AtomicBool,
 }
 
 impl Progress for StderrProgress {
     fn start(&self, phase: &str, total: u64) {
         self.total.store(total.max(1), Ordering::Relaxed);
         self.shown.store(u64::MAX, Ordering::Relaxed);
-        eprintln!("  {phase}");
+        let monte_carlo = phase == "Monte Carlo";
+        self.monte_carlo.store(monte_carlo, Ordering::Relaxed);
+        if !monte_carlo {
+            eprintln!("  {phase}");
+        }
     }
 
     fn advance(&self, done: u64) {
@@ -604,13 +610,22 @@ impl Progress for StderrProgress {
         let percent = done.min(total) * 100 / total;
         // Redraw only when the whole-number percentage changes.
         if self.shown.swap(percent, Ordering::Relaxed) != percent {
-            eprint!("\r  {percent}% ({done}/{total})");
+            if self.monte_carlo.load(Ordering::Relaxed) {
+                eprint!("\rMonte Carlo: {percent}% ({done}/{total})");
+            } else {
+                eprint!("\r  Searching... {percent}%");
+            }
             let _ = io::stderr().flush();
         }
     }
 
     fn finish(&self) {
-        eprintln!();
+        if self.monte_carlo.load(Ordering::Relaxed) {
+            let total = self.total.load(Ordering::Relaxed);
+            eprintln!("\rMonte Carlo: 100% ({total}/{total})");
+        } else {
+            eprintln!();
+        }
     }
 }
 

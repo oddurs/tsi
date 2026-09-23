@@ -158,7 +158,7 @@ impl MonteCarloResults {
     }
 
     /// Everything above, ready to serialize.
-    pub fn summary(&self) -> MonteCarloSummary {
+    pub(crate) fn summary(&self) -> MonteCarloSummary {
         MonteCarloSummary {
             success_probability: self.success_probability(),
             total_runs: self.total_runs,
@@ -176,6 +176,9 @@ impl MonteCarloResults {
     }
 }
 
+/// Results serialize as their statistics (not the raw samples): success
+/// probability, run counts, delta-v and mass distributions, the margin
+/// needed for 95% confidence, the seed, and the design that was stressed.
 impl Serialize for MonteCarloResults {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.summary().serialize(serializer)
@@ -201,46 +204,44 @@ fn std_dev(samples: &[f64]) -> f64 {
 
 /// A [`MonteCarloResults`] reduced to its statistics, for serialization.
 #[derive(Debug, Clone, Serialize)]
-#[non_exhaustive]
-pub struct MonteCarloSummary {
+pub(crate) struct MonteCarloSummary {
     /// Probability of achieving target delta-v (0.0 to 1.0)
-    pub success_probability: f64,
+    success_probability: f64,
     /// Builds evaluated
-    pub total_runs: u64,
+    total_runs: u64,
     /// Builds that reached the target and could lift off
-    pub successes: u64,
+    successes: u64,
     /// Builds too heavy to lift off
-    pub failures: u64,
-    pub target_delta_v_mps: Velocity,
-    pub runtime_ms: u64,
+    failures: u64,
+    target_delta_v_mps: Velocity,
+    runtime_ms: u64,
     /// Delta-v distribution (m/s)
-    pub delta_v: DistributionSummary,
+    delta_v: DistributionSummary,
     /// Liftoff mass distribution (kg)
-    pub mass: DistributionSummary,
+    mass: DistributionSummary,
     /// Additional margin needed for 95% confidence (m/s)
-    pub required_margin_95_mps: f64,
+    required_margin_95_mps: f64,
     /// Seed that reproduces this run
-    pub seed: u64,
+    seed: u64,
     /// Liftoff mass of the design that was stressed
-    pub design_total_mass_kg: Mass,
+    design_total_mass_kg: Mass,
     /// Stages in the design that was stressed
-    pub design_stage_count: usize,
+    design_stage_count: usize,
 }
 
 /// Summary statistics for a distribution.
 #[derive(Debug, Clone, Serialize)]
-#[non_exhaustive]
-pub struct DistributionSummary {
-    pub mean: f64,
-    pub std_dev: f64,
+pub(crate) struct DistributionSummary {
+    mean: f64,
+    std_dev: f64,
     /// 5th percentile (worst case)
-    pub percentile_5: f64,
+    percentile_5: f64,
     /// 50th percentile (median)
-    pub percentile_50: f64,
+    percentile_50: f64,
     /// 95th percentile (best case)
-    pub percentile_95: f64,
-    pub min: f64,
-    pub max: f64,
+    percentile_95: f64,
+    min: f64,
+    max: f64,
 }
 
 impl DistributionSummary {

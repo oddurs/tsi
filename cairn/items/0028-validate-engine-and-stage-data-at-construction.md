@@ -2,12 +2,12 @@
 id: 28
 title: Validate engine and stage data at construction
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p1
 effort: m
 area: engine
@@ -19,6 +19,6 @@ Isp/thrust above vacuum are all accepted.
 
 ## Acceptance criteria
 
-- [ ] `Engine::new` and TOML loading reject physically impossible data with a named error
-- [ ] Embedded database validated by a test
-- [ ] `Engine` fields all private with accessors; derives `PartialEq`
+- [x] `Engine::new` and TOML loading reject physically impossible data with a named error
+- [x] Embedded database validated by a test
+- [x] `Engine` fields all private with accessors; derives `PartialEq`

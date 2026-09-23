@@ -30,6 +30,8 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy, library only
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
 
   test:
     name: Test (${{ matrix.os }})
@@ -44,6 +46,39 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-targets
       - run: cargo test --doc
+      - name: Test the library without the CLI
+        run: cargo test --no-default-features
+
+  library:
+    name: Library carries no CLI dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --no-default-features
+      - name: No clap, anyhow or serde_json in the library's dependency tree
+        run: |
+          if cargo tree --no-default-features -e normal | grep -E 'clap|anyhow|serde_json'; then
+            echo "the library pulled in a CLI dependency" >&2
+            exit 1
+          fi
+
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run every example against the library alone
+        run: |
+          for example in examples/*.rs; do
+            name=$(basename "$example" .rs)
+            echo "::group::$name"
+            cargo run --release --no-default-features --example "$name"
+            echo "::endgroup::"
+          done
 
   docs:
     name: Docs
@@ -55,6 +90,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps
+      - run: cargo doc --no-deps --no-default-features
 
   msrv:
     name: MSRV (1.87)

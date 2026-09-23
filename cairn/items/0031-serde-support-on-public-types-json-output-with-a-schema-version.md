@@ -2,14 +2,14 @@
 id: 31
 title: Serde support on public types; JSON output with a schema version
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 depends_on:
 - 29
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p1
 effort: m
 area: output
@@ -29,6 +29,6 @@ plus `"schema_version": 1`.
 
 ## Acceptance criteria
 
-- [ ] Hand-built `json!` output removed
-- [ ] Snapshot tests of JSON output (insta)
-- [ ] JSON schema documented in docs/commands.md
+- [x] Hand-built `json!` output removed
+- [x] Snapshot tests of JSON output (insta)
+- [x] JSON schema documented in docs/commands.md

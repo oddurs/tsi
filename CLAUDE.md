@@ -4,50 +4,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`tsi` (Tsiolkovsky) is a Rust CLI tool for rocket staging optimization. Given payload mass, target delta-v, and available engines, it finds optimal staging configurations that maximize payload fraction or minimize total mass.
+`tsiolkovsky` is a Rust library for rocket staging optimization, and `tsi` is the command-line tool built on it. Given payload mass, target delta-v, and available engines, it finds the lightest staging configuration that does the job.
 
-**Current Status:** v0.7.0 (Static fire). Working CLI with engine database, N-stage multi-engine optimization cross-checked by two independent optimizers, Monte Carlo analysis of fixed designs, and validation against real vehicles. MSRV is Rust 1.87; CI runs on Linux, macOS and Windows.
+**Current Status:** v0.8.0 (Stacking). Library-first API: validated builders, typed errors, no panics from public input, serde, a prelude. The CLI lives in the binary behind the default `cli` feature. MSRV is Rust 1.87; CI runs on Linux, macOS and Windows, with and without the CLI.
 
 ## Build Commands
 
 ```bash
-cargo build              # Compile
-cargo test               # Run all tests
-cargo test <name>        # Run specific test
-cargo test --lib         # Run only unit tests
-cargo clippy --all-targets -- -D warnings   # Lint (CI denies warnings)
-cargo fmt                # Format code
-cargo run -- <cmd>       # Run CLI (e.g., cargo run -- optimize --help)
-cairn check              # Validate the roadmap (CI runs this too)
+cargo build                          # Library and the tsi binary
+cargo build --no-default-features    # Library only (no clap/anyhow/serde_json)
+cargo test                           # Everything
+cargo test --no-default-features     # Library tests only
+cargo clippy --all-targets -- -D warnings   # Lint (CI also runs it without the CLI)
+cargo fmt                            # Format code
+cargo run -- <cmd>                   # Run the CLI (e.g., cargo run -- optimize --help)
+cargo run --example falcon9          # Examples need no CLI feature
+cargo bench --no-default-features    # Criterion benchmarks (baselines in cairn #34)
+INSTA_UPDATE=always cargo test --test cli snapshot   # Re-record JSON snapshots
+cairn check                          # Validate the roadmap (CI runs this too)
 ```
 
 ## Architecture
 
-The tool is a Rust library + CLI application:
+The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin CLI over it.
 
-### Module Structure
-- **units/** - Type-safe newtypes for physical quantities (Mass, Velocity, Force, Time, Isp, Ratio). Prevents unit errors at compile time.
-- **engine/** - Engine struct, Propellant enum, TOML database loading (11 real engines: Merlin-1D, Raptor-2, RS-25, RL-10C, etc.)
-- **stage/** - Stage (single stage) and Rocket (multi-stage assembly) types. `Rocket` evaluates its first stage with an `IspModel` (ascent-averaged by default).
-- **physics/** - Tsiolkovsky equation, TWR, burn time, `IspModel` (why Isp depends on altitude), empirical loss estimates
-- **optimizer/** - `Problem`/`Constraints`, the `Optimizer` trait, `AnalyticalOptimizer` (Lagrange staging solution refined numerically; any stage count, any engine mix), `BruteForceOptimizer` (streaming grid search, used as an independent cross-check), `MonteCarloRunner` (stresses a fixed design; seeded). `sizing.rs` holds the shared top-down stage sizing and the closed-form minimum engine count.
-- **cli/** - clap-based argument parsing: `calculate`, `optimize`, `engines`, `completions`
+### Library modules
+- **units/** - Type-safe newtypes for physical quantities (Mass, Velocity, Force, Time, Isp, Ratio). Serialize as plain numbers.
+- **engine/** - `Engine` (private fields, validated by `Engine::new` and on deserialize), `Propellant`, `EngineDatabase` (`builtin()` parses the embedded TOML once).
+- **stage/** - `Stage` and `Rocket`, validated constructors. `Rocket` records its booster `IspModel` and surface gravity, and quotes TWR against it.
+- **physics/** - Tsiolkovsky equation, TWR, burn time, `IspModel` (why Isp depends on altitude), empirical loss estimates.
+- **optimizer/** - `Problem::builder()` (validates on build), `Constraints` (with per-stage structural ratios), the `Optimizer` trait, `AnalyticalOptimizer`, `BruteForceOptimizer`, `MonteCarloRunner`, `Progress` observer, `Infeasibility` causes. `sizing.rs` holds the shared top-down stage sizing and the closed-form minimum engine count.
+- **prelude** - everyday imports.
+
+### Binary modules (feature `cli`)
+- **cli/** - clap argument parsing and commands; turns `Infeasibility` into flag advice; `StderrProgress`
 - **output/** - Terminal (box-drawing) and ASCII diagram formatters
 
 ### Key Design Decisions
 - Newtype pattern for all physical units (compiler prevents adding kg to m/s)
 - Engine data embedded via `include_str!` for single-binary distribution
+- The library never prints and never panics on public input (`clippy::unwrap_used`/`expect_used` denied outside tests); crate-private unchecked constructors (`from_parts`) are used only where validity is guaranteed by construction
+- Every public struct in the optimizer module has private fields; errors and enums that may grow are `#[non_exhaustive]`
+- The library reports causes (`Infeasibility`); only the CLI mentions flags
 - No hidden margins: rockets are sized to hit the target exactly; margin is an explicit constraint
 - Comparisons that validate input are written so NaN fails them (`!(x > 0.0)` style, or `is_nan() ||`)
-- Property-based testing with proptest for physics and optimizer invariants
+- Property-based testing with proptest for physics and optimizer invariants, and fuzzing of public constructors
 - Validation tests against real rockets, honest about where ideal theory stops (see the Saturn V test)
+- JSON output is versioned (`schema_version`); snapshot tests pin it
 
-### Test Suite (323 tests)
-- **182 unit tests** - Inline in source modules
-- **75 integration tests** - CLI end-to-end tests (`tests/cli.rs`)
-- **16 property tests** - Invariants via proptest (`tests/properties.rs`), including analytical vs brute force
+### Test Suite (336 tests)
+- **179 library unit tests** and **8 binary unit tests** - Inline in source modules
+- **79 CLI tests** - End-to-end, including two JSON snapshots (`tests/cli.rs`, needs the `cli` feature)
+- **16 property tests** - Invariants via proptest (`tests/properties.rs`)
 - **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
-- **32 doc tests** - Examples in rustdoc comments (none ignored)
+- **36 doc tests** - Examples in rustdoc comments (none ignored)
 
 ## Development Roadmap
 

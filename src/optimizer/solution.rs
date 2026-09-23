@@ -166,10 +166,7 @@ impl Solution {
     }
 
     /// Everything about the solution, computed and ready to serialize.
-    ///
-    /// Units are in the field names: `total_mass_kg` is kilograms,
-    /// `delta_v_mps` metres per second. `Solution` serializes as its report.
-    pub fn report(&self) -> SolutionReport {
+    pub(crate) fn report(&self) -> SolutionReport {
         let rocket = &self.rocket;
         let stages = rocket
             .stages()
@@ -210,6 +207,11 @@ impl Solution {
     }
 }
 
+/// A solution serializes as a report with every derived number filled in:
+/// per-stage delta-v, Isp, burn time and TWR as well as masses. Units are in
+/// the field names (`total_mass_kg`, `delta_v_mps`). This is the document
+/// `tsi optimize --output json` prints; its fields are listed in the command
+/// reference.
 impl Serialize for Solution {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.report().serialize(serializer)
@@ -218,51 +220,48 @@ impl Serialize for Solution {
 
 /// A [`Solution`] with every derived number filled in, for serialization.
 #[derive(Debug, Clone, Serialize)]
-#[non_exhaustive]
-pub struct SolutionReport {
-    pub target_delta_v_mps: Velocity,
-    pub payload_kg: Mass,
-    pub total_mass_kg: Mass,
-    pub total_delta_v_mps: Velocity,
-    pub payload_fraction: Ratio,
-    pub margin_mps: Velocity,
-    pub margin_percent: f64,
-    pub booster_isp_model: IspModel,
-    pub surface_gravity_mps2: f64,
-    pub stages: Vec<StageReport>,
-    pub metadata: Metadata,
+pub(crate) struct SolutionReport {
+    target_delta_v_mps: Velocity,
+    payload_kg: Mass,
+    total_mass_kg: Mass,
+    total_delta_v_mps: Velocity,
+    payload_fraction: Ratio,
+    margin_mps: Velocity,
+    margin_percent: f64,
+    booster_isp_model: IspModel,
+    surface_gravity_mps2: f64,
+    stages: Vec<StageReport>,
+    metadata: Metadata,
 }
 
 /// One stage of a [`SolutionReport`], first stage first.
 #[derive(Debug, Clone, Serialize)]
-#[non_exhaustive]
-pub struct StageReport {
+pub(crate) struct StageReport {
     /// Stage number, 1 = first stage
-    pub stage: usize,
-    pub engine: String,
-    pub engine_count: u32,
-    pub propellant_kg: Mass,
-    pub structural_mass_kg: Mass,
-    pub dry_mass_kg: Mass,
-    pub wet_mass_kg: Mass,
-    pub delta_v_mps: Velocity,
+    stage: usize,
+    engine: String,
+    engine_count: u32,
+    propellant_kg: Mass,
+    structural_mass_kg: Mass,
+    dry_mass_kg: Mass,
+    wet_mass_kg: Mass,
+    delta_v_mps: Velocity,
     /// Effective Isp for this stage's burn (ascent-averaged for an Earth first stage)
-    pub isp_s: Isp,
-    pub burn_time_s: Time,
+    isp_s: Isp,
+    burn_time_s: Time,
     /// Vacuum thrust over everything above and including this stage, at ignition
-    pub twr_ignition: Ratio,
+    twr_ignition: Ratio,
     /// What gets the rocket off the pad (first stage only)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub twr_liftoff: Option<Ratio>,
+    twr_liftoff: Option<Ratio>,
 }
 
 /// How a solution was found.
 #[derive(Debug, Clone, Serialize)]
-#[non_exhaustive]
-pub struct Metadata {
-    pub optimizer: String,
-    pub iterations: u64,
-    pub runtime_ms: u64,
+pub(crate) struct Metadata {
+    optimizer: String,
+    iterations: u64,
+    runtime_ms: u64,
 }
 
 #[cfg(test)]

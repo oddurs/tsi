@@ -2,12 +2,12 @@
 id: 27
 title: Remove panics reachable from public input
 type: feature
-status: doing
+status: done
 milestone: v0.8
 assignee: Oddur Sigurdsson
-claimed: 2026-09-23
 created: 2026-09-22
 updated: 2026-09-23
+closed_at: 2026-09-23
 priority: p0
 effort: m
 area: stage
@@ -22,6 +22,6 @@ Known sites:
 
 ## Acceptance criteria
 
-- [ ] Each becomes a `Result` or is made unreachable by construction
-- [ ] Proptest fuzzes public constructors with arbitrary f64 and never panics
-- [ ] `clippy::unwrap_used` and `clippy::expect_used` denied in non-test library code
+- [x] Each becomes a `Result` or is made unreachable by construction
+- [x] Proptest fuzzes public constructors with arbitrary f64 and never panics
+- [x] `clippy::unwrap_used` and `clippy::expect_used` denied in non-test library code

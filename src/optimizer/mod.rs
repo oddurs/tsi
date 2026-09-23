@@ -46,11 +46,9 @@ mod uncertainty;
 
 pub use analytical::AnalyticalOptimizer;
 pub use brute_force::BruteForceOptimizer;
-pub use monte_carlo::{
-    DistributionSummary, MonteCarloResults, MonteCarloRunner, MonteCarloSummary,
-};
+pub use monte_carlo::{MonteCarloResults, MonteCarloRunner};
 pub use problem::{ConstraintError, Constraints, Problem, ProblemBuilder, ProblemError};
-pub use solution::{Metadata, OptimizerKind, Solution, SolutionReport, StageReport};
+pub use solution::{OptimizerKind, Solution};
 pub use uncertainty::{Uncertainty, UncertaintyError};
 
 use crate::units::{Mass, Ratio, Velocity};

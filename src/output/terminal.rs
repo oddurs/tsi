@@ -319,10 +319,7 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
     // Print histogram
     if !results.delta_v_samples().is_empty() {
         println!();
-        print_histogram(
-            results.delta_v_samples(),
-            results.target_delta_v().as_mps(),
-        );
+        print_histogram(results.delta_v_samples(), results.target_delta_v().as_mps());
     }
 }
 

@@ -129,6 +129,41 @@ $ tsi calculate --engine raptor-2 --propellant-mass 100000 -o compact
 Δv: 7,771 m/s | Burn: 140s | TWR: 2.24
 ```
 
+## As a library
+
+`tsi` is built on the `tsiolkovsky` crate, which you can use directly. Turn
+off the default `cli` feature to leave out the command-line dependencies:
+
+```toml
+[dependencies]
+tsiolkovsky = { version = "0.8", default-features = false }
+```
+
+```rust
+use tsiolkovsky::prelude::*;
+
+let db = EngineDatabase::builtin();
+let problem = Problem::builder()
+    .payload(Mass::tonnes(5.0))
+    .target(Velocity::mps(9_400.0))
+    .engines([db.get("merlin-1d").unwrap().clone(), db.get("rl-10c").unwrap().clone()])
+    .constraints(Constraints::default().with_margin(0.02))
+    .build()?;
+
+let solution = AnalyticalOptimizer.optimize(&problem)?;
+for stage in solution.rocket().stages() {
+    println!("{} × {}", stage.engine_count(), stage.engine().name());
+}
+
+// How often would it work, built with real manufacturing errors?
+let results = MonteCarloRunner::new(Uncertainty::default()).run_design(&solution, 10_000)?;
+println!("{:.1}% of builds reach orbit", results.success_probability() * 100.0);
+```
+
+Everything serializes with serde: a `Solution` serializes to the same
+document as `tsi optimize --output json`. See [`examples/`](examples/) for
+more, starting with `cargo run --example falcon9`.
+
 ## Commands
 
 | Command | Description |
@@ -298,7 +333,7 @@ $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
 - [x] v0.5 - Monte Carlo uncertainty analysis
 - [x] v0.6 - Polish (ASCII diagrams, shell completions, custom engines)
 - [x] v0.7 - Static fire (optimizer correctness, CI)
-- [ ] v0.8 - Stacking (library-first API)
+- [x] v0.8 - Stacking (library-first API)
 - [ ] v0.9 - Wet dress (`--explain`, mission targets, real vehicles)
 - [ ] v1.0 - Liftoff (API freeze, crates.io)
 

@@ -31,6 +31,7 @@ and each one has to pass before the next begins:
 | v0.5.0 | 2026-01-16 | Monte Carlo uncertainty analysis, confidence intervals |
 | v0.6.0 | 2026-01-16 | ASCII diagrams, completions, custom engines, loss estimates |
 | v0.7.0 | 2026-09-22 | Static fire: correct optimizer and Monte Carlo, ascent Isp, CI |
+| v0.8.0 | 2026-09-23 | Stacking: the `tsiolkovsky` library, builder API, typed errors, serde |
 
 The phase-by-phase plan that got tsi to v0.6 is archived in
 [docs/plan/roadmap-v0.md](docs/plan/roadmap-v0.md).
@@ -65,30 +66,24 @@ The engine lights on the test stand before anything is stacked on it.
 
 ## v0.8 — Stacking
 
-`#·········` 8% · 1 of 12 done · due 2026-10-27
+`##########` 100% · 12 of 12 done · due 2026-10-27
 
 The vehicle is assembled: a library that can be depended on.
-
-### backlog
-
-- [ ] [`0033`](https://github.com/oddurs/tsi/blob/main/cairn/items/0033-runnable-examples-that-narrate-real-rockets.md) Runnable examples/ that narrate real rockets <sup>docs · p1 · m · docs</sup>
-- [ ] [`0034`](https://github.com/oddurs/tsi/blob/main/cairn/items/0034-real-criterion-benchmarks-for-the-optimizers.md) Real criterion benchmarks for the optimizers <sup>chore · p2 · s · infra</sup>
-
-### in progress
-
-- [ ] [`0024`](https://github.com/oddurs/tsi/blob/main/cairn/items/0024-feature-gate-the-cli-so-the-library-carries-no-clap.md) Feature-gate the CLI so the library carries no clap <sup>feature · p0 · l · cli</sup>
-- [ ] [`0025`](https://github.com/oddurs/tsi/blob/main/cairn/items/0025-the-library-never-prints-progress-through-an-observer.md) The library never prints: progress through an observer <sup>feature · p0 · m · optimizer</sup>
-- [ ] [`0026`](https://github.com/oddurs/tsi/blob/main/cairn/items/0026-typed-errors-with-structured-infeasibility-reasons.md) Typed errors with structured infeasibility reasons <sup>feature · p0 · m · optimizer</sup>
-- [ ] [`0027`](https://github.com/oddurs/tsi/blob/main/cairn/items/0027-remove-panics-reachable-from-public-input.md) Remove panics reachable from public input <sup>feature · p0 · m · stage</sup>
-- [ ] [`0028`](https://github.com/oddurs/tsi/blob/main/cairn/items/0028-validate-engine-and-stage-data-at-construction.md) Validate engine and stage data at construction <sup>feature · p1 · m · engine</sup>
-- [ ] [`0029`](https://github.com/oddurs/tsi/blob/main/cairn/items/0029-builder-api-and-semver-safe-public-types.md) Builder API and semver-safe public types <sup>feature · p0 · l · optimizer</sup>
-- [ ] [`0030`](https://github.com/oddurs/tsi/blob/main/cairn/items/0030-per-stage-structural-ratio-with-the-textbook-definition.md) Per-stage structural ratio, with the textbook definition <sup>feature · p1 · m · stage</sup>
-- [ ] [`0031`](https://github.com/oddurs/tsi/blob/main/cairn/items/0031-serde-support-on-public-types-json-output-with-a-schema-version.md) Serde support on public types; JSON output with a schema version <sup>feature · p1 · m · output</sup>
-- [ ] [`0032`](https://github.com/oddurs/tsi/blob/main/cairn/items/0032-loss-models-use-velocity-share-g0-and-cover-every-stage.md) Loss models use Velocity, share G0, and cover every stage <sup>chore · p2 · s · physics</sup>
 
 ### done
 
 - [x] [`0023`](https://github.com/oddurs/tsi/blob/main/cairn/items/0023-rename-the-crate-to-tsiolkovsky-keep-the-binary-as-tsi.md) Rename the crate to tsiolkovsky; keep the binary as tsi <sup>chore · p0 · s · infra</sup>
+- [x] [`0024`](https://github.com/oddurs/tsi/blob/main/cairn/items/0024-feature-gate-the-cli-so-the-library-carries-no-clap.md) Feature-gate the CLI so the library carries no clap <sup>feature · p0 · l · cli</sup>
+- [x] [`0025`](https://github.com/oddurs/tsi/blob/main/cairn/items/0025-the-library-never-prints-progress-through-an-observer.md) The library never prints: progress through an observer <sup>feature · p0 · m · optimizer</sup>
+- [x] [`0026`](https://github.com/oddurs/tsi/blob/main/cairn/items/0026-typed-errors-with-structured-infeasibility-reasons.md) Typed errors with structured infeasibility reasons <sup>feature · p0 · m · optimizer</sup>
+- [x] [`0027`](https://github.com/oddurs/tsi/blob/main/cairn/items/0027-remove-panics-reachable-from-public-input.md) Remove panics reachable from public input <sup>feature · p0 · m · stage</sup>
+- [x] [`0028`](https://github.com/oddurs/tsi/blob/main/cairn/items/0028-validate-engine-and-stage-data-at-construction.md) Validate engine and stage data at construction <sup>feature · p1 · m · engine</sup>
+- [x] [`0029`](https://github.com/oddurs/tsi/blob/main/cairn/items/0029-builder-api-and-semver-safe-public-types.md) Builder API and semver-safe public types <sup>feature · p0 · l · optimizer</sup>
+- [x] [`0030`](https://github.com/oddurs/tsi/blob/main/cairn/items/0030-per-stage-structural-ratio-with-the-textbook-definition.md) Per-stage structural ratio, with the textbook definition <sup>feature · p1 · m · stage</sup>
+- [x] [`0031`](https://github.com/oddurs/tsi/blob/main/cairn/items/0031-serde-support-on-public-types-json-output-with-a-schema-version.md) Serde support on public types; JSON output with a schema version <sup>feature · p1 · m · output</sup>
+- [x] [`0032`](https://github.com/oddurs/tsi/blob/main/cairn/items/0032-loss-models-use-velocity-share-g0-and-cover-every-stage.md) Loss models use Velocity, share G0, and cover every stage <sup>chore · p2 · s · physics</sup>
+- [x] [`0033`](https://github.com/oddurs/tsi/blob/main/cairn/items/0033-runnable-examples-that-narrate-real-rockets.md) Runnable examples/ that narrate real rockets <sup>docs · p1 · m · docs</sup>
+- [x] [`0034`](https://github.com/oddurs/tsi/blob/main/cairn/items/0034-real-criterion-benchmarks-for-the-optimizers.md) Real criterion benchmarks for the optimizers <sup>chore · p2 · s · infra</sup>
 
 ## v0.9 — Wet dress
 

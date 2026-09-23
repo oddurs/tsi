@@ -1388,3 +1388,115 @@ fn monte_carlo_on_the_moon_uses_lunar_gravity() {
     assert!(json["monte_carlo"]["success_probability"].as_f64().unwrap() > 0.9);
     assert!(json["stages"][0]["twr_liftoff"].as_f64().unwrap() >= 1.2);
 }
+
+// ============================================================================
+// JSON snapshots (schema_version 1)
+// ============================================================================
+
+/// Round every number to six significant figures, zero rounding noise, and
+/// drop timings and iteration counts, so that snapshots survive last-digit
+/// floating-point differences between platforms and wall-clock noise.
+fn stable(mut value: serde_json::Value) -> serde_json::Value {
+    fn walk(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Number(n) if n.is_f64() => {
+                if let Some(x) = n.as_f64() {
+                    if x.abs() < 1e-6 {
+                        *v = serde_json::json!(0.0);
+                    } else if x.fract() != 0.0 {
+                        let digits = 6 - x.abs().log10().ceil() as i32;
+                        let scale = 10f64.powi(digits);
+                        let rounded = (x * scale).round() / scale;
+                        *v = serde_json::json!(rounded);
+                    }
+                }
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(walk),
+            serde_json::Value::Object(map) => {
+                for key in ["runtime_ms", "iterations"] {
+                    if map.contains_key(key) {
+                        map.insert(key.into(), serde_json::json!(format!("[{key}]")));
+                    }
+                }
+                map.values_mut().for_each(walk);
+            }
+            _ => {}
+        }
+    }
+    walk(&mut value);
+    value
+}
+
+#[test]
+fn snapshot_optimize_json() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+    ]);
+    assert_eq!(json["schema_version"], 1);
+    insta::assert_json_snapshot!("optimize_raptor_leo", stable(json));
+}
+
+#[test]
+fn snapshot_optimize_json_with_monte_carlo() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "merlin-1d,rl-10c",
+        "--max-stages",
+        "3",
+        "--margin",
+        "3",
+        "--monte-carlo",
+        "500",
+        "--seed",
+        "7",
+    ]);
+    insta::assert_json_snapshot!("optimize_mixed_engines_monte_carlo", stable(json));
+}
+
+#[test]
+fn structural_ratio_accepts_per_stage_values() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--structural-ratio",
+        "0.04,0.06",
+    ]);
+    let ratio = |i: usize| {
+        let s = &json["stages"][i];
+        s["structural_mass_kg"].as_f64().unwrap() / s["propellant_kg"].as_f64().unwrap()
+    };
+    assert!((ratio(0) - 0.04).abs() < 1e-9, "{}", ratio(0));
+    assert!((ratio(1) - 0.06).abs() < 1e-9, "{}", ratio(1));
+}
+
+#[test]
+fn structural_ratio_list_rejects_garbage() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--structural-ratio",
+            "0.04,abc",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("expected a ratio"));
+}

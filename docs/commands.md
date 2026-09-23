@@ -241,18 +241,54 @@ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
 burn time and TWR (at liftoff for stage 1, at ignition above it), then totals,
 payload fraction, margin, and the booster Isp that was used.
 
-**JSON output** fields:
+**JSON output** follows a versioned schema. `schema_version` rises only when
+a field is removed or changes meaning; new fields can appear without it.
 
-- `target_delta_v_mps`, `total_delta_v_mps`, `payload_kg`, `total_mass_kg`
-- `payload_fraction`, `margin_mps`, `margin_percent`, `design_margin_percent`
-- `booster_isp_model`: `ascent-averaged` or `vacuum`
-- `stages[]`: `engine`, `engine_count`, `propellant_kg`, `dry_mass_kg`,
-  `wet_mass_kg`, `delta_v_mps`, `isp_s`, `burn_time_s`, `twr_ignition`, and
-  `twr_liftoff` on stage 1
-- `metadata`: `optimizer`, `iterations`, `runtime_ms`
-- `monte_carlo` (with `--monte-carlo`): success probability, delta-v and mass
-  distributions, required margin for 95% confidence, `seed`, and the mass and
-  stage count of the design that was stressed
+#### Schema version 1
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema_version` | integer | `1` |
+| `target_delta_v_mps` | number | Delta-v asked for |
+| `design_margin_percent` | number | Margin designed in (`--margin`) |
+| `total_delta_v_mps` | number | Delta-v the rocket delivers |
+| `margin_mps`, `margin_percent` | number | Delivered minus target |
+| `payload_kg`, `total_mass_kg` | number | Payload, and liftoff mass including it |
+| `payload_fraction` | number | Payload / liftoff mass (0-1) |
+| `booster_isp_model` | string | `ascent-averaged` or `vacuum` |
+| `surface_gravity_mps2` | number | Gravity TWR is quoted against |
+| `stages` | array | One object per stage, first stage first |
+| `metadata` | object | `optimizer`, `iterations`, `runtime_ms` |
+| `monte_carlo` | object | Only with `--monte-carlo`; see below |
+
+Each entry of `stages`:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `stage` | integer | 1 = first stage |
+| `engine`, `engine_count` | string, integer | Engine name and how many |
+| `propellant_kg`, `structural_mass_kg` | number | Propellant; structure excluding engines |
+| `dry_mass_kg`, `wet_mass_kg` | number | Structure plus engines; plus propellant |
+| `delta_v_mps` | number | Delta-v this stage delivers, carrying everything above it |
+| `isp_s` | number | Effective Isp for this stage's burn |
+| `burn_time_s` | number | Burn time at full thrust |
+| `twr_ignition` | number | Vacuum TWR at this stage's ignition |
+| `twr_liftoff` | number | Liftoff TWR (first stage only) |
+
+`monte_carlo`:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `success_probability` | number | Fraction of builds reaching the target that can lift off |
+| `total_runs`, `successes`, `failures` | integer | Builds; successes; too heavy to lift off |
+| `delta_v`, `mass` | object | `mean`, `std_dev`, `min`, `max`, `percentile_5`, `percentile_50`, `percentile_95` |
+| `required_margin_95_mps` | number | Margin needed for 95% confidence |
+| `seed` | integer | Repeats the run with `--seed` |
+| `design_total_mass_kg`, `design_stage_count` | number, integer | The design that was stressed |
+| `target_delta_v_mps`, `runtime_ms` | number | |
+
+Library users get the same document by serializing a `Solution` and
+`MonteCarloResults`, both of which implement `serde::Serialize`.
 
 ### Monte Carlo
 
