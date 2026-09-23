@@ -360,11 +360,7 @@ fn print_histogram(samples: &[f64], target: f64) {
 
     for (i, &count) in bins.iter().enumerate() {
         let bin_start = min + i as f64 * bin_width;
-        let bar_len = if max_bin > 0 {
-            (count * HISTOGRAM_WIDTH) / max_bin
-        } else {
-            0
-        };
+        let bar_len = (count * HISTOGRAM_WIDTH).checked_div(max_bin).unwrap_or(0);
 
         // Mark the bin containing the target
         let marker = if bin_start <= target && target < bin_start + bin_width {
