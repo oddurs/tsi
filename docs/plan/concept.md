@@ -137,7 +137,7 @@ Brute-force search over staging configurations evaluates millions of candidates.
 
 ### Single Binary Distribution
 
-`cargo install tsi` gives you a single executable with no runtime dependencies. No Python virtual environments, no Node modules, no Java runtime. It just works.
+`cargo install tsiolkovsky` gives you a single executable with no runtime dependencies. No Python virtual environments, no Node modules, no Java runtime. It just works.
 
 ### The Ecosystem
 
@@ -212,7 +212,7 @@ Don't pretend precision that doesn't exist.
 
 ### Short Term (v1.0)
 
-- `cargo install tsi` works
+- `cargo install tsiolkovsky` works
 - Calculate single-stage performance
 - Optimize multi-stage rockets
 - Ship with 10+ real engines

@@ -15,7 +15,7 @@ cargo install --path .
 ### From crates.io
 
 ```bash
-cargo install tsi
+cargo install tsiolkovsky   # installs the `tsi` command
 ```
 
 ### Verify installation

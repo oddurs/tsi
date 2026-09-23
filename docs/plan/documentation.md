@@ -53,7 +53,7 @@ Named for [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Tsio
 ## Installation
 
 ```bash
-cargo install tsi
+cargo install tsiolkovsky   # installs the `tsi` command
 ```
 
 Or with Homebrew:
