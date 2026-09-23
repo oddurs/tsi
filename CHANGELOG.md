@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A new look for every command.** Output is laid out by one renderer from
+  a small document model: a title line, aligned fields, tables, and charts.
+  `tsi optimize` shows a stage table, bars for how delta-v and mass are
+  shared between stages, and a compact rocket diagram with aligned labels;
+  `--show-losses` shows bars; Monte Carlo shows a histogram with the target
+  marked and, when confidence is low, the `--margin` that would fix it.
+- **Colour**, only in terminals: `--color auto|always|never`, and `NO_COLOR`
+  is respected. (#41)
+- `--ascii` for plain ASCII output, symbols included.
+- `tsi calculate --output json`.
+- Every JSON document carries `schema_version` and `command`.
+- Snapshot tests of each command's pretty output. (#59)
+
+### Changed
+
+- **Breaking (JSON):** `tsi engines --output json` prints
+  `{"schema_version", "command", "engines": [...]}` instead of a bare array.
+- `tsi engines --output` is `pretty` or `json`; `table` still works as an
+  alias for `pretty`.
+- The pretty output of every command is new; scripts should use `--output
+  json` or `-o compact`, whose formats are stable.
+
 ## [0.8.0] - 2026-09-23 — Stacking
 
 tsi is now a library with a command-line tool on top, rather than the

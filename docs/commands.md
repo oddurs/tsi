@@ -3,9 +3,50 @@
 ## Global Options
 
 ```
--h, --help     Print help
--V, --version  Print version
+    --color <WHEN>  Colour: auto, always, never [default: auto]
+    --ascii         Plain ASCII instead of box-drawing and block characters
+-h, --help          Print help
+-V, --version       Print version
 ```
+
+Global options go anywhere on the command line: `tsi --ascii engines` and
+`tsi engines --ascii` are the same.
+
+## Output
+
+Every command can print for people or for programs.
+
+**For people** (the default, `--output pretty`), output is laid out the same
+way everywhere: a title line saying what was asked, then aligned fields,
+tables, and charts. Names are in cyan, the numbers you came for in bold,
+explanations dimmed, and verdicts green, yellow or red. Colour appears only
+when writing to a terminal: it is off in pipes and files, when `NO_COLOR` is
+set, and with `--color never`; `--color always` forces it. `--ascii` swaps
+box and block characters (and symbols like × and Δ) for plain ASCII.
+
+Charts show the shape of the answer at a glance:
+
+- **Δv** and **Mass** bars in `tsi optimize` split the rocket's delta-v and
+  liftoff mass between its stages and payload
+- **losses** (`--show-losses`) as bars, gravity against drag against steering
+- **Monte Carlo** (`--monte-carlo`) as a histogram of delta-v, with the
+  target marked
+- **the rocket** (`--diagram`), drawn with stage heights to scale
+
+**For programs** (`--output json`), every command prints one JSON document
+with the same envelope:
+
+```json
+{
+  "schema_version": 1,
+  "command": "optimize",
+  ...
+}
+```
+
+`schema_version` rises only when a field is removed or changes meaning; new
+fields can appear without it. Field names carry their units (`delta_v_mps`,
+`propellant_kg`).
 
 ---
 
@@ -32,7 +73,7 @@ tsi calculate [OPTIONS]
 | `--dry-mass <KG>` | Dry mass in kg (requires --wet-mass) |
 | `--thrust <N>` | Thrust in Newtons (overrides engine thrust) |
 | `--structural-ratio <R>` | Structural mass / propellant mass [default: 0.1] |
-| `-o, --output <FORMAT>` | Output format: pretty, compact [default: pretty] |
+| `-o, --output <FORMAT>` | pretty, compact (one line), json [default: pretty] |
 
 ### Input Modes
 
@@ -59,16 +100,24 @@ tsi calculate --isp 350 --wet-mass 100000 --dry-mass 10000
 tsi calculate --engine raptor-2 --propellant-mass 100000 -o compact
 ```
 
-### Output Fields
+### Output
 
-| Field | Description |
-|-------|-------------|
-| Engine | Engine name and count |
-| Propellant | Propellant mass and type |
-| Dry mass | Stage dry mass (structure + engines) |
-| Δv | Delta-v achievable |
-| Burn time | Time to consume all propellant |
-| TWR (vac) | Vacuum thrust-to-weight ratio at ignition |
+```
+$ tsi calculate --engine raptor-2 --propellant-mass 100000
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           7,771 m/s   in vacuum, carrying nothing
+  Mass ratio   9.62        111,600 kg wet, 11,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.24        vacuum thrust over fully loaded weight
+```
+
+Delta-v is the stage on its own, in vacuum, carrying nothing. TWR is vacuum
+thrust over the fully loaded stage. With `--output json` the same numbers come
+as `delta_v_mps`, `mass_ratio`, `isp_s`, `propellant_kg`, `dry_mass_kg`,
+`wet_mass_kg`, `thrust_n`, `burn_time_s` and `twr_vacuum`, plus `engine`,
+`engine_count` and `propellant` when an engine was named.
 
 ---
 
@@ -86,7 +135,7 @@ tsi engines [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output <FORMAT>` | Output format: table, json [default: table] |
+| `-o, --output <FORMAT>` | pretty, json [default: pretty; `table` also accepted] |
 | `-p, --propellant <TYPE>` | Filter by propellant type |
 | `-n, --name <PATTERN>` | Filter by name (case-insensitive substring) |
 | `-v, --verbose` | Show sea-level values (thrust_sl, isp_sl) |
@@ -127,18 +176,27 @@ tsi engines --output json
 tsi engines --propellant kerosene --verbose
 ```
 
-### Output Fields
+### Output
 
-**Standard output:**
-- NAME - Engine name
-- PROPELLANT - Propellant type
-- THRUST(vac) - Vacuum thrust in kN
-- ISP(vac) - Vacuum specific impulse in seconds
-- MASS - Engine dry mass in kg
+```
+$ tsi engines --propellant hydrogen --verbose
+tsi engines  ·  3 engines matching
 
-**Verbose output (adds):**
-- THRUST(sl) - Sea-level thrust in kN
-- ISP(sl) - Sea-level specific impulse in seconds
+  Engine  Propellant  Thrust vac  Isp vac  Thrust SL  Isp SL      Mass  T/W
+  RS-25   LOX/LH2       2,279 kN    452 s   1,859 kN   366 s  3,527 kg   66
+  RL-10C  LOX/LH2         106 kN    453 s          —       —    190 kg   57
+  J-2     LOX/LH2       1,033 kN    421 s          —       —  1,788 kg   59
+
+  · — : no sea-level rating; a vacuum engine, for upper stages only
+
+  · T/W: vacuum thrust over the engine's own weight
+```
+
+`--verbose` adds sea-level thrust and Isp (a dash means the engine has no
+sea-level rating: a vacuum engine, for upper stages only) and T/W, vacuum
+thrust over the engine's own weight. JSON lists each engine's `name`,
+`propellant`, `thrust_sl`, `thrust_vac` (N), `isp_sl`, `isp_vac` (s) and
+`dry_mass` (kg) under `"engines"`.
 
 ---
 
@@ -237,9 +295,10 @@ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --output json
 
 ### Output
 
-**Pretty output** shows each stage's engines, propellant, dry mass, delta-v,
-burn time and TWR (at liftoff for stage 1, at ignition above it), then totals,
-payload fraction, margin, and the booster Isp that was used.
+**Pretty output** starts with the liftoff mass and payload fraction, then a
+table of stages (engines, propellant, dry mass, Isp, delta-v, and TWR at
+liftoff for stage 1 and at ignition above it), bars showing how delta-v and
+mass are shared between stages, and the margin, booster Isp and optimizer.
 
 **JSON output** follows a versioned schema. `schema_version` rises only when
 a field is removed or changes meaning; new fields can appear without it.
@@ -249,6 +308,7 @@ a field is removed or changes meaning; new fields can appear without it.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `schema_version` | integer | `1` |
+| `command` | string | `"optimize"` |
 | `target_delta_v_mps` | number | Delta-v asked for |
 | `design_margin_percent` | number | Margin designed in (`--margin`) |
 | `total_delta_v_mps` | number | Delta-v the rocket delivers |
@@ -303,43 +363,26 @@ how much margin 95% confidence needs, and the seed to repeat the run.
 ### Example Output
 
 ```
-═══════════════════════════════════════════════════════════════
-  tsi — Staging Optimization Complete
-═══════════════════════════════════════════════════════════════
+$ tsi optimize --payload 5000 --target-dv 9400 --engine merlin-1d,rl-10c --max-stages 3 --diagram
+  The rocket
 
-  Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  186,599 kg
-
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 2 (upper)                                            │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 28,819 kg (LOX/CH4)                            │
-  │  Dry mass:   3,906 kg                                       │
-  │  Δv:         4,955 m/s                                      │
-  │  Burn time:  40.4s                                          │
-  │  TWR:        6.62 at ignition                               │
-  └─────────────────────────────────────────────────────────────┘
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 136,365 kg (LOX/CH4)                           │
-  │  Dry mass:   12,509 kg                                      │
-  │  Δv:         4,445 m/s                                      │
-  │  Burn time:  3m 11s                                         │
-  │  TWR:        1.23 at liftoff                                │
-  └─────────────────────────────────────────────────────────────┘
-
-  Total propellant:  165,184 kg
-  Total dry mass:    16,415 kg
-  Total burn time:   231s
-
-  Payload fraction:  2.68%
-  Delta-v margin:    -0 m/s (-0.0%)
-  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
-
-  Optimizer: Analytical (181 configs)
-
-═══════════════════════════════════════════════════════════════
+     ╱╲      payload    5,000 kg
+    ╱  ╲
+   ┌────┐
+   │    │
+   │ S3 │    stage 3    1 × RL-10C       8.5 t propellant   3,982 m/s
+   ├────┤
+   │    │
+   │    │
+   │ S2 │    stage 2    2 × RL-10C      18.9 t propellant   3,418 m/s
+   │    │
+   ├────┤
+   │    │
+   │    │
+   │ S1 │    stage 1    2 × Merlin-1D   37.1 t propellant   2,000 m/s
+   │    │
+   │    │
+   └┬──┬┘
 ```
 
 ---

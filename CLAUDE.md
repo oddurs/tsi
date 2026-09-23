@@ -38,7 +38,7 @@ The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin 
 
 ### Binary modules (feature `cli`)
 - **cli/** - clap argument parsing and commands; turns `Infeasibility` into flag advice; `StderrProgress`
-- **output/** - Terminal (box-drawing) and ASCII diagram formatters
+- **output/** - the output system: `data` (serializable command results, JSON envelope) → `views` (a `Doc` of titles, fields, tables, charts, art, in semantic tones) → `render` (layout, glyphs, colour via anstream). Views never pad or colour; add new output as data plus a view
 
 ### Key Design Decisions
 - Newtype pattern for all physical units (compiler prevents adding kg to m/s)
@@ -50,11 +50,11 @@ The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin 
 - Comparisons that validate input are written so NaN fails them (`!(x > 0.0)` style, or `is_nan() ||`)
 - Property-based testing with proptest for physics and optimizer invariants, and fuzzing of public constructors
 - Validation tests against real rockets, honest about where ideal theory stops (see the Saturn V test)
-- JSON output is versioned (`schema_version`); snapshot tests pin it
+- JSON output is versioned (`schema_version`, `command`); snapshot tests pin it and the pretty output
 
-### Test Suite (343 tests)
-- **181 library unit tests** and **11 binary unit tests** - Inline in source modules
-- **81 CLI tests** - End-to-end, including two JSON snapshots (`tests/cli.rs`, needs the `cli` feature)
+### Test Suite (351 tests)
+- **181 library unit tests** and **13 binary unit tests** - Inline in source modules
+- **87 CLI tests** - End-to-end, including JSON and pretty-output snapshots (`tests/cli.rs`, needs the `cli` feature)
 - **16 property tests** - Invariants via proptest (`tests/properties.rs`)
 - **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
 - **36 doc tests** - Examples in rustdoc comments (none ignored)

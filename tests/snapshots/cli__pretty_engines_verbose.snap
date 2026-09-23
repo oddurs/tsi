@@ -1,0 +1,23 @@
+---
+source: tests/cli.rs
+expression: "pretty(&[\"engines\", \"--verbose\"])"
+---
+
+tsi engines  ·  11 engines
+
+  Engine         Propellant  Thrust vac  Isp vac  Thrust SL  Isp SL      Mass  T/W
+  Merlin-1D      LOX/RP-1        914 kN    311 s     845 kN   282 s    470 kg  198
+  Merlin-Vacuum  LOX/RP-1        981 kN    348 s          —       —    470 kg  213
+  Raptor-2       LOX/CH4       2,450 kN    350 s   2,256 kN   327 s  1,600 kg  156
+  Raptor-Vacuum  LOX/CH4       2,550 kN    380 s          —       —  1,600 kg  163
+  RS-25          LOX/LH2       2,279 kN    452 s   1,859 kN   366 s  3,527 kg   66
+  RL-10C         LOX/LH2         106 kN    453 s          —       —    190 kg   57
+  F-1            LOX/RP-1      7,770 kN    304 s   6,770 kN   263 s  8,400 kg   94
+  J-2            LOX/LH2       1,033 kN    421 s          —       —  1,788 kg   59
+  RD-180         LOX/RP-1      4,152 kN    338 s   3,830 kN   311 s  5,480 kg   77
+  BE-4           LOX/CH4       2,600 kN    340 s   2,400 kN   310 s  2,000 kg  133
+  Rutherford     LOX/RP-1         26 kN    343 s      24 kN   303 s     35 kg   76
+
+  · — : no sea-level rating; a vacuum engine, for upper stages only
+
+  · T/W: vacuum thrust over the engine's own weight

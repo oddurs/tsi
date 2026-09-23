@@ -39,7 +39,12 @@ src/
 │   └── monte_carlo.rs   MonteCarloRunner, MonteCarloResults
 │
 ├── cli/                 (binary) clap arguments and the commands
-└── output/              (binary) terminal and ASCII-diagram formatting
+└── output/              (binary) the output system:
+    ├── data.rs          what each command computes; the JSON envelope
+    ├── doc.rs           the document model: blocks, spans, tones
+    ├── views.rs         each command's data as a document
+    ├── render.rs        layout, glyphs, colour, charts
+    └── diagram.rs       the rocket drawing
 ```
 
 ## Layers
@@ -143,6 +148,27 @@ versioned report documented in [../commands.md](../commands.md)
 JSON contract is the schema, not Rust structs. `tsi optimize --output json`
 adds `design_margin_percent`, which belongs to the problem.
 
+## The CLI's output system
+
+Every command in the binary works in three steps, so that all of them look
+like one tool and none can print something its JSON doesn't say:
+
+1. **Data** (`output/data.rs`, plus the library's serializable `Solution` and
+   `MonteCarloResults`). A command computes one value. `--output json` prints
+   it inside an `Envelope`: `schema_version`, `command`, then the data.
+2. **View** (`output/views.rs`). The same value becomes a `Doc`: a title,
+   aligned fields, tables, charts (stacked budget bars, plain bars, a
+   histogram with a marker), art (the rocket diagram) and notes. Views say
+   what text *means* (`Tone::Strong`, `Accent`, `Muted`, `Good`, `Warn`,
+   `Bad`), never how it looks, and never pad or draw.
+3. **Render** (`output/render.rs`). One renderer lays out every document:
+   column widths from content, a two-space indent, bars sized to the width,
+   Unicode or ASCII glyphs (`--ascii` also spells out ×, Δ, ±). Tones become
+   ANSI styles, and printing goes through `anstream`, which strips them for
+   pipes, `NO_COLOR` and `--color never`.
+
+Snapshot tests pin the rendered output of each command, as they do the JSON.
+
 ## Public API shape
 
 - Structs with invariants have private fields and accessors.
@@ -160,6 +186,6 @@ adds `design_margin_percent`, which belongs to the problem.
 | Formatting, lints, warnings | CI `fmt`, `clippy` (both feature sets), `RUSTFLAGS=-D warnings` |
 | MSRV 1.87 | CI `msrv` job; `rust-version` in Cargo.toml |
 | Docs build and have no broken links | CI `docs` job, `RUSTDOCFLAGS=-D warnings` |
-| JSON output doesn't drift | `insta` snapshots in `tests/cli.rs` |
+| JSON and pretty output don't drift | `insta` snapshots in `tests/cli.rs` |
 | Examples keep working | CI `examples` job |
 | Roadmap is valid and rendered | CI `roadmap` job (`cairn check`, `cairn render`) |

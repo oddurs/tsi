@@ -42,85 +42,88 @@ cargo install tsiolkovsky
 ```bash
 # Using an engine from the database
 $ tsi calculate --engine raptor-2 --propellant-mass 100000
-Engine:     Raptor-2
-Propellant: 100,000 kg (LOX/CH4)
-Dry mass:   11,600 kg
-Δv:         7,771 m/s
-Burn time:  2m 20s
-TWR (vac):  2.24
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           7,771 m/s   in vacuum, carrying nothing
+  Mass ratio   9.62        111,600 kg wet, 11,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.24        vacuum thrust over fully loaded weight
 
 # Using manual parameters
 $ tsi calculate --isp 350 --mass-ratio 8.0
-Δv:         7,137 m/s
-Mass ratio: 8.000
+tsi calculate  ·  Isp 350 s, mass ratio 8.00
+
+  Δv           7,137 m/s   in vacuum, carrying nothing
+  Mass ratio   8.00        wet mass over dry mass
+  Isp          350 s       vacuum
 ```
 
 ### List available engines
 
 ```bash
 $ tsi engines
-NAME             PROPELLANT    THRUST(vac)   ISP(vac)       MASS
---------------------------------------------------------------
-Merlin-1D        LOX/RP-1            914 kN      311s        470 kg
-Raptor-2         LOX/CH4           2,450 kN      350s      1,600 kg
-RS-25            LOX/LH2           2,279 kN      452s      3,527 kg
-...
+tsi engines  ·  11 engines
+
+  Engine         Propellant  Thrust vac  Isp vac      Mass
+  Merlin-1D      LOX/RP-1        914 kN    311 s    470 kg
+  Merlin-Vacuum  LOX/RP-1        981 kN    348 s    470 kg
+  Raptor-2       LOX/CH4       2,450 kN    350 s  1,600 kg
+  ...
 
 # Filter by propellant
 $ tsi engines --propellant methane
-NAME             PROPELLANT    THRUST(vac)   ISP(vac)       MASS
---------------------------------------------------------------
-Raptor-2         LOX/CH4           2,450 kN      350s      1,600 kg
-Raptor-Vacuum    LOX/CH4           2,550 kN      380s      1,600 kg
-BE-4             LOX/CH4           2,600 kN      340s      2,000 kg
+tsi engines  ·  3 engines matching
+
+  Engine         Propellant  Thrust vac  Isp vac      Mass
+  Raptor-2       LOX/CH4       2,450 kN    350 s  1,600 kg
+  Raptor-Vacuum  LOX/CH4       2,550 kN    380 s  1,600 kg
+  BE-4           LOX/CH4       2,600 kN    340 s  2,000 kg
 ```
 
 ### Optimize a two-stage rocket
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
-═══════════════════════════════════════════════════════════════
-  tsi — Staging Optimization Complete
-═══════════════════════════════════════════════════════════════
+tsi optimize  ·  5,000 kg to 9,400 m/s
 
-  Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  186,599 kg
+  Liftoff   186,599 kg   2 stages, 3m 51s of burning
+  Payload   5,000 kg     2.68% of the liftoff mass
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 2 (upper)                                            │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 28,819 kg (LOX/CH4)                            │
-  │  Dry mass:   3,906 kg                                       │
-  │  Δv:         4,955 m/s                                      │
-  │  Burn time:  40.4s                                          │
-  │  TWR:        6.62 at ignition                               │
-  └─────────────────────────────────────────────────────────────┘
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 136,365 kg (LOX/CH4)                           │
-  │  Dry mass:   12,509 kg                                      │
-  │  Δv:         4,445 m/s                                      │
-  │  Burn time:  3m 11s                                         │
-  │  TWR:        1.23 at liftoff                                │
-  └─────────────────────────────────────────────────────────────┘
+  Stage      Engines       Propellant   Dry mass    Isp         Δv  TWR
+  1 booster  1 × Raptor-2  136,365 kg  12,509 kg  345 s  4,445 m/s  1.23 liftoff
+  2 upper    1 × Raptor-2   28,819 kg   3,906 kg  350 s  4,955 m/s  6.62 ignition
+  ───────────────────────────────────────────────────────────────────────────────
+  total                    165,184 kg  16,415 kg         9,400 m/s
 
-  Total propellant:  165,184 kg
-  Total dry mass:    16,415 kg
-  Total burn time:   231s
+  Δv     ███████████████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   9,400 m/s
+         █ stage 1 47%   ▓ stage 2 53%
 
-  Payload fraction:  2.68%
-  Delta-v margin:    -0 m/s (-0.0%)
-  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
+  Mass   ██████████████████████████████████████▓▓▓▓▓▓▓▓▓▒   186,599 kg
+         █ stage 1 80%   ▓ stage 2 18%   ▒ payload 3%
 
-  Optimizer: Analytical (181 configs)
-
-═══════════════════════════════════════════════════════════════
+  Margin        0 m/s        hits the target exactly; --margin adds headroom
+  Booster Isp   345 s        stage 1, averaged over the climb (350 s in vacuum)
+  Optimizer     Analytical   181 configurations evaluated
 ```
 
 The booster gets a little less delta-v than the upper stage: from sea level
 its Raptor delivers 345 s rather than 350 s, and its engine mass counts for
 less on a big stage. Ask for headroom with `--margin 2%`.
+
+### Output for people and for programs
+
+Output is coloured in a terminal and plain in pipes; `NO_COLOR` and
+`--color never` turn colour off, `--ascii` swaps box and block characters for
+plain ASCII. Every command also speaks JSON, in the same envelope:
+
+```bash
+$ tsi calculate --engine raptor-2 --propellant-mass 100000 -o json | jq '{command, delta_v_mps}'
+{
+  "command": "calculate",
+  "delta_v_mps": 7770.500979171574
+}
+```
 
 ### Compact output for scripting
 
@@ -203,12 +206,13 @@ over propellant) of 4.4%, which lands on the real 22.2 t dry mass:
 
 ```bash
 $ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 411000 --structural-ratio 0.044
-Engine:     Merlin-1D (×9)
-Propellant: 411,000 kg (LOX/RP-1)
-Dry mass:   22,314 kg
-Δv:         9,047 m/s
-Burn time:  2m 32s
-TWR (vac):  1.94
+tsi calculate  ·  Merlin-1D × 9, 411,000 kg propellant
+
+  Δv           9,047 m/s   in vacuum, carrying nothing
+  Mass ratio   19.42       433,314 kg wet, 22,314 kg dry
+  Isp          311 s       vacuum, LOX/RP-1
+  Burn time    2m 32s      at full vacuum thrust, 8,226 kN
+  TWR          1.94        vacuum thrust over fully loaded weight
 ```
 
 That is the stage on its own, in vacuum. Carrying the second stage and 22.8 t
@@ -237,45 +241,40 @@ $ tsi optimize --payload 5000 --target-dv 9400 \
     --custom-engine "SuperEngine:3000:380:2000:loxch4" --engine SuperEngine
 ```
 
-### ASCII rocket diagram
+### Rocket diagram
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --diagram
+  The rocket
 
-      /\
-     /  \
-    /    \   <- Payload (5k kg)
-   /______\
- |            |  <- Stage 2: Raptor-2 x1
- |     S2     |     29k kg
- |            |
- |____________|
- |            |  <- Stage 1: Raptor-2 x1
- |            |     136k kg
- |            |
- |     S1     |
- |            |
- |____________|
-    \    /
-     \  /
-      \/
+     ╱╲      payload    5,000 kg
+    ╱  ╲
+   ┌────┐
+   │    │
+   │ S2 │    stage 2    1 × Raptor-2    28.8 t propellant   4,955 m/s
+   ├────┤
+   │    │
+   │    │
+   │ S1 │    stage 1    1 × Raptor-2   136.4 t propellant   4,445 m/s
+   │    │
+   │    │
+   └┬──┬┘
 ```
 
 ### Atmospheric loss estimation
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 --show-losses
+  Losses on the way to low Earth orbit
 
-  Gravity losses:     1,434 m/s
-  Drag losses:          211 m/s
-  Steering losses:      100 m/s
-  ──────────────────────────────
-  Total losses:       1,745 m/s
+  Gravity    1,434 m/s   ████████████████████████████████████████████████
+  Drag         211 m/s   ███████
+  Steering     100 m/s   ███▍
 
-  Ideal delta-v:      9,400 m/s
-  After losses:       7,655 m/s
-  LEO orbital v:      7,800 m/s
-  Shortfall:            145 m/s (insufficient)
+  Ideal Δv   9,400 m/s
+  Losses     −1,745 m/s   first-order estimates; see docs/physics.md
+  Left       7,655 m/s    145 m/s short of orbital velocity
+  Orbit      7,800 m/s    circular, 200 km
 ```
 
 A liftoff TWR of 1.23 means a long, slow climb and heavy gravity losses. Try
@@ -304,16 +303,17 @@ half the time, so give it some:
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
     --margin 3 --monte-carlo 1000 --seed 1
+  Monte Carlo: this design built 1,000 times
 
-  Design stressed:      2-stage, 217,426 kg (the solution above)
-  Success probability:  100.0% (HIGH CONFIDENCE)
-  Builds:               1000 (0 too heavy to lift off)
-  Seed:                 1 (repeat with --seed 1)
+  Success       100.0%              reach 9,400 m/s, confident
+  Delta-v       9,541 – 9,830 m/s   5th to 95th percentile, median 9,680
+  Uncertainty   Isp ±1%, thrust ±2%, structure ±5%  (1σ, each stage)
+  Seed          1                   repeat with --seed 1
 
-  Confidence Intervals:
-    5th %ile:     9,541 m/s  (worst case)
-    50th %ile:    9,680 m/s  (median)
-    95th %ile:    9,830 m/s  (best case)
+                   ▂▁▃█▃▇▅▅▅▃ ▄
+        ▁▁▁▃▂▅▄▃▇▆▇██████████▇██▇▆▄▄▄▂▃▁▂▁▁▁▁ ▁
+  ▲───────────────────────────────────────────────
+  9,400                                  9,984 m/s
 
 # Higher uncertainty for development engines
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2 \
