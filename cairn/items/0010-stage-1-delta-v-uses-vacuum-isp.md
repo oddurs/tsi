@@ -2,10 +2,12 @@
 id: 10
 title: Stage 1 delta-v uses vacuum Isp
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p0
 effort: m
 area: physics
@@ -26,6 +28,6 @@ pressure profile is fine. Make the model a named, swappable choice (`IspModel::V
 
 ## Acceptance criteria
 
-- [ ] Booster stages default to the ascent-averaged model; upper stages to vacuum
-- [ ] Falcon 9 S1 Δv validation tightened to match the new model
-- [ ] Rustdoc explains why nozzle expansion makes Isp altitude-dependent
+- [x] Booster stages default to the ascent-averaged model; upper stages to vacuum
+- [x] Falcon 9 S1 Δv validation tightened to match the new model
+- [x] Rustdoc explains why nozzle expansion makes Isp altitude-dependent

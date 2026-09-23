@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::physics::IspModel;
 use crate::units::{Force, Isp, Mass, Ratio};
 
 use super::Propellant;
@@ -164,6 +165,18 @@ impl Engine {
         // At p=1 (sea level): isp_sl
         let isp = self.isp_vac_s + p * (self.isp_sl_s - self.isp_vac_s);
         Isp::seconds(isp)
+    }
+
+    /// Effective Isp over a burn flown under the given [`IspModel`].
+    ///
+    /// Vacuum gives [`isp_vac`](Self::isp_vac). Ascent-averaged evaluates
+    /// [`isp_at`](Self::isp_at) at the mean pressure a first stage sees on its
+    /// way to orbit (see [`crate::physics::ASCENT_MEAN_PRESSURE_RATIO`]).
+    pub fn isp_for(&self, model: IspModel) -> Isp {
+        match model {
+            IspModel::Vacuum => self.isp_vac(),
+            IspModel::AscentAveraged => self.isp_at(model.mean_pressure_ratio()),
+        }
     }
 
     /// Interpolate thrust at a given atmospheric pressure ratio.

@@ -2,10 +2,12 @@
 id: 12
 title: Brute force misses small rockets and silently prunes engines
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p1
 effort: m
 area: optimizer
@@ -20,7 +22,11 @@ area: optimizer
 
 ## Acceptance criteria
 
-- [ ] Grid bounds scale from payload and target Δv
-- [ ] Any pruning is reported in the solution metadata
-- [ ] `iterations` counts every evaluated configuration
-- [ ] `--max-engines` reaches the brute force optimizer; Super Heavy (33 × Raptor-2) is expressible
+- [x] Grid bounds scale from payload and target Δv
+- [x] Any pruning is reported in the solution metadata
+- [x] `iterations` counts every evaluated configuration
+- [x] `--max-engines` reaches the brute force optimizer; Super Heavy (33 × Raptor-2) is expressible
+
+## 2026-09-22
+
+Grid bounds scale with payload (0.05x to 2000x); target delta-v enters through the feasibility filter rather than the bounds. The coarse grid doubles in density (up to 3 times) if it finds nothing, which fixed a property-test case near Merlin's structural limit. There is no pruning left to report: every engine is tried on every stage, and engine count is solved in closed form rather than searched.

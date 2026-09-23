@@ -2,10 +2,11 @@
 id: 14
 title: --max-stages is treated as the exact stage count
 type: bug
-status: planned
+status: done
 milestone: v0.7
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p1
 effort: s
 area: cli
@@ -21,4 +22,4 @@ area: cli
 
 ## Acceptance criteria
 
-- [ ] CLI test: `--max-stages 3` can return a 2-stage solution
+- [x] CLI test: `--max-stages 3` can return a 2-stage solution

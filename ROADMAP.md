@@ -38,32 +38,35 @@ The phase-by-phase plan that got tsi to v0.6 is archived in
 
 ## v0.7 — Static fire
 
-`#·········` 6% · 1 of 17 done · due 2026-10-06
+`########··` 76% · 13 of 17 done · due 2026-10-06
 
 The engine lights on the test stand before anything is stacked on it.
 
 ### planned
 
 - [ ] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
-- [ ] [`0008`](https://github.com/oddurs/tsi/blob/main/cairn/items/0008-make-the-delta-v-margin-explicit-defaulting-to-zero.md) Make the delta-v margin explicit, defaulting to zero <sup>feature · p0 · s · optimizer</sup>
-- [ ] [`0009`](https://github.com/oddurs/tsi/blob/main/cairn/items/0009-analytical-optimizer-is-11-heavier-than-brute-force.md) Analytical optimizer is 11% heavier than brute force <sup>bug · p0 · l · optimizer</sup>
-- [ ] [`0010`](https://github.com/oddurs/tsi/blob/main/cairn/items/0010-stage-1-delta-v-uses-vacuum-isp.md) Stage 1 delta-v uses vacuum Isp <sup>bug · p0 · m · physics</sup>
-- [ ] [`0011`](https://github.com/oddurs/tsi/blob/main/cairn/items/0011-monte-carlo-re-optimizes-each-sample-instead-of-stressing-one-design.md) Monte Carlo re-optimizes each sample instead of stressing one design <sup>bug · p0 · l · optimizer</sup>
-- [ ] [`0012`](https://github.com/oddurs/tsi/blob/main/cairn/items/0012-brute-force-misses-small-rockets-and-silently-prunes-engines.md) Brute force misses small rockets and silently prunes engines <sup>bug · p1 · m · optimizer</sup>
-- [ ] [`0013`](https://github.com/oddurs/tsi/blob/main/cairn/items/0013-brute-force-materialises-the-whole-search-space-in-memory.md) Brute force materialises the whole search space in memory <sup>bug · p1 · m · optimizer</sup>
-- [ ] [`0014`](https://github.com/oddurs/tsi/blob/main/cairn/items/0014-max-stages-is-treated-as-the-exact-stage-count.md) --max-stages is treated as the exact stage count <sup>bug · p1 · s · cli</sup>
-- [ ] [`0015`](https://github.com/oddurs/tsi/blob/main/cairn/items/0015-stage1-engine-and-stage2-engine-do-not-pin-engines.md) --stage1-engine and --stage2-engine do not pin engines <sup>bug · p1 · m · cli</sup>
-- [ ] [`0016`](https://github.com/oddurs/tsi/blob/main/cairn/items/0016-gravity-and-sea-level-never-reach-the-optimizer.md) --gravity and --sea-level never reach the optimizer <sup>bug · p2 · s · cli</sup>
-- [ ] [`0017`](https://github.com/oddurs/tsi/blob/main/cairn/items/0017-json-stage-1-twr-reports-vacuum-twr-instead-of-liftoff-twr.md) JSON stage-1 "twr" reports vacuum TWR instead of liftoff TWR <sup>bug · p1 · s · output</sup>
-- [ ] [`0018`](https://github.com/oddurs/tsi/blob/main/cairn/items/0018-nan-and-infinite-inputs-pass-validation.md) NaN and infinite inputs pass validation <sup>bug · p1 · s · optimizer</sup>
-- [ ] [`0019`](https://github.com/oddurs/tsi/blob/main/cairn/items/0019-property-tests-for-optimizer-invariants.md) Property tests for optimizer invariants <sup>chore · p0 · m · optimizer</sup>
-- [ ] [`0020`](https://github.com/oddurs/tsi/blob/main/cairn/items/0020-optimizer-reproduces-falcon-9-and-saturn-v-staging.md) Optimizer reproduces Falcon 9 and Saturn V staging <sup>validation · p1 · m · physics</sup>
 - [ ] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
 - [ ] [`0022`](https://github.com/oddurs/tsi/blob/main/cairn/items/0022-three-doctests-are-marked-ignore.md) Three doctests are marked ignore <sup>bug · p2 · s · docs</sup>
+
+### in progress
+
+- [ ] [`0008`](https://github.com/oddurs/tsi/blob/main/cairn/items/0008-make-the-delta-v-margin-explicit-defaulting-to-zero.md) Make the delta-v margin explicit, defaulting to zero <sup>feature · p0 · s · optimizer</sup>
 
 ### done
 
 - [x] [`0006`](https://github.com/oddurs/tsi/blob/main/cairn/items/0006-make-clippy-clean-across-all-targets.md) Make clippy clean across all targets <sup>chore · p0 · s · infra</sup>
+- [x] [`0009`](https://github.com/oddurs/tsi/blob/main/cairn/items/0009-analytical-optimizer-is-11-heavier-than-brute-force.md) Analytical optimizer is 11% heavier than brute force <sup>bug · p0 · l · optimizer</sup>
+- [x] [`0010`](https://github.com/oddurs/tsi/blob/main/cairn/items/0010-stage-1-delta-v-uses-vacuum-isp.md) Stage 1 delta-v uses vacuum Isp <sup>bug · p0 · m · physics</sup>
+- [x] [`0011`](https://github.com/oddurs/tsi/blob/main/cairn/items/0011-monte-carlo-re-optimizes-each-sample-instead-of-stressing-one-design.md) Monte Carlo re-optimizes each sample instead of stressing one design <sup>bug · p0 · l · optimizer</sup>
+- [x] [`0012`](https://github.com/oddurs/tsi/blob/main/cairn/items/0012-brute-force-misses-small-rockets-and-silently-prunes-engines.md) Brute force misses small rockets and silently prunes engines <sup>bug · p1 · m · optimizer</sup>
+- [x] [`0013`](https://github.com/oddurs/tsi/blob/main/cairn/items/0013-brute-force-materialises-the-whole-search-space-in-memory.md) Brute force materialises the whole search space in memory <sup>bug · p1 · m · optimizer</sup>
+- [x] [`0014`](https://github.com/oddurs/tsi/blob/main/cairn/items/0014-max-stages-is-treated-as-the-exact-stage-count.md) --max-stages is treated as the exact stage count <sup>bug · p1 · s · cli</sup>
+- [x] [`0015`](https://github.com/oddurs/tsi/blob/main/cairn/items/0015-stage1-engine-and-stage2-engine-do-not-pin-engines.md) --stage1-engine and --stage2-engine do not pin engines <sup>bug · p1 · m · cli</sup>
+- [x] [`0016`](https://github.com/oddurs/tsi/blob/main/cairn/items/0016-gravity-and-sea-level-never-reach-the-optimizer.md) --gravity and --sea-level never reach the optimizer <sup>bug · p2 · s · cli</sup>
+- [x] [`0017`](https://github.com/oddurs/tsi/blob/main/cairn/items/0017-json-stage-1-twr-reports-vacuum-twr-instead-of-liftoff-twr.md) JSON stage-1 "twr" reports vacuum TWR instead of liftoff TWR <sup>bug · p1 · s · output</sup>
+- [x] [`0018`](https://github.com/oddurs/tsi/blob/main/cairn/items/0018-nan-and-infinite-inputs-pass-validation.md) NaN and infinite inputs pass validation <sup>bug · p1 · s · optimizer</sup>
+- [x] [`0019`](https://github.com/oddurs/tsi/blob/main/cairn/items/0019-property-tests-for-optimizer-invariants.md) Property tests for optimizer invariants <sup>chore · p0 · m · optimizer</sup>
+- [x] [`0020`](https://github.com/oddurs/tsi/blob/main/cairn/items/0020-optimizer-reproduces-falcon-9-and-saturn-v-staging.md) Optimizer reproduces Falcon 9 and Saturn V staging <sup>validation · p1 · m · physics</sup>
 
 ## v0.8 — Stacking
 
@@ -124,7 +127,7 @@ API freeze, release, and publication.
 
 ## later — Beyond orbit
 
-`··········` 0% · 0 of 5 done
+`··········` 0% · 0 of 6 done
 
 Worth doing after 1.0. None of it has a date yet.
 
@@ -135,4 +138,5 @@ Worth doing after 1.0. None of it has a date yet.
 - [ ] [`0055`](https://github.com/oddurs/tsi/blob/main/cairn/items/0055-interactive-tui-with-live-parameter-adjustment.md) Interactive TUI with live parameter adjustment <sup>feature · p3 · xl · cli</sup>
 - [ ] [`0056`](https://github.com/oddurs/tsi/blob/main/cairn/items/0056-multi-objective-optimization-and-cost-models.md) Multi-objective optimization and cost models <sup>feature · p3 · l · optimizer</sup>
 - [ ] [`0057`](https://github.com/oddurs/tsi/blob/main/cairn/items/0057-webassembly-and-python-bindings.md) WebAssembly and Python bindings <sup>feature · p3 · l · infra</sup>
+- [ ] [`0058`](https://github.com/oddurs/tsi/blob/main/cairn/items/0058-gravity-loss-aware-staging-optimization.md) Gravity-loss-aware staging optimization <sup>feature · p2 · l · optimizer</sup>
 

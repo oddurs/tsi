@@ -8,6 +8,9 @@ use std::time::Duration;
 use crate::stage::Rocket;
 use crate::units::Velocity;
 
+/// Rounding allowance when checking that a solution reaches its target.
+pub(crate) const DELTA_V_TOLERANCE_MPS: f64 = 1e-3;
+
 /// Result of an optimization run.
 ///
 /// Contains the optimal rocket configuration and metadata about
@@ -44,6 +47,9 @@ pub struct Solution {
     /// The optimized rocket configuration
     pub rocket: Rocket,
 
+    /// The delta-v the solution was asked to reach
+    pub target_delta_v: Velocity,
+
     /// Delta-v margin beyond target (positive = excess capacity)
     pub margin: Velocity,
 
@@ -64,6 +70,7 @@ impl Solution {
         let margin = Velocity::mps(actual_dv.as_mps() - target_dv.as_mps());
         Self {
             rocket,
+            target_delta_v: target_dv,
             margin,
             iterations,
             runtime: Duration::ZERO,
@@ -83,6 +90,7 @@ impl Solution {
         let margin = Velocity::mps(actual_dv.as_mps() - target_dv.as_mps());
         Self {
             rocket,
+            target_delta_v: target_dv,
             margin,
             iterations,
             runtime,
@@ -96,8 +104,11 @@ impl Solution {
     }
 
     /// Whether the solution meets or exceeds the target delta-v.
+    ///
+    /// Optimizers size rockets to hit the target exactly, so this allows for
+    /// floating-point rounding of a millimetre per second.
     pub fn meets_target(&self) -> bool {
-        self.margin.as_mps() >= 0.0
+        self.margin.as_mps() >= -DELTA_V_TOLERANCE_MPS
     }
 
     /// Margin as a percentage of target delta-v.

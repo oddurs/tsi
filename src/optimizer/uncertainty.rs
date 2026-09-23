@@ -25,7 +25,11 @@
 //! assert!((uncertainty.isp_percent - 1.0).abs() < 0.01);
 //!
 //! // Custom uncertainty for early development
-//! let high_uncertainty = Uncertainty::new(3.0, 5.0, 2.0);
+//! let high_uncertainty = Uncertainty {
+//!     isp_percent: 3.0,
+//!     thrust_percent: 2.0,
+//!     structural_percent: 5.0,
+//! };
 //! ```
 //!
 //! # Physical Basis
@@ -46,6 +50,7 @@ use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
 use crate::engine::Engine;
+use crate::stage::{Rocket, Stage};
 use crate::units::{Force, Isp, Mass, Ratio};
 
 /// Uncertainty specification for Monte Carlo analysis.
@@ -98,14 +103,13 @@ impl Uncertainty {
     /// * `structural_percent` - Structural ratio uncertainty (typically 3-10%)
     /// * `thrust_percent` - Thrust uncertainty (typically 1-3%)
     ///
-    /// # Example
-    ///
-    /// ```
-    /// use tsi::optimizer::Uncertainty;
-    ///
-    /// // High uncertainty for development engine
-    /// let dev_uncertainty = Uncertainty::new(3.0, 10.0, 3.0);
-    /// ```
+    /// The argument order (isp, structural, thrust) does not match the field
+    /// order (isp, thrust, structural), and all three are plain `f64`s, so a
+    /// mix-up compiles silently. Use a struct literal instead.
+    #[deprecated(
+        since = "0.7.0",
+        note = "argument order differs from field order; use a struct literal"
+    )]
     pub fn new(isp_percent: f64, structural_percent: f64, thrust_percent: f64) -> Self {
         Self {
             isp_percent,
@@ -211,16 +215,62 @@ impl ParameterSampler {
     ///
     /// Perturbs ISP and thrust values while keeping other
     /// parameters (name, propellant, dry mass) unchanged.
+    ///
+    /// One Isp factor scales both sea-level and vacuum Isp, and one thrust
+    /// factor scales both thrusts. The errors are correlated because they
+    /// have the same causes (combustion efficiency, chamber pressure), and
+    /// perturbing them separately could give an engine that is better at sea
+    /// level than in vacuum.
     pub fn perturb_engine(&self, engine: &Engine) -> Engine {
+        self.perturb_engine_with_rng(engine, &mut rand::thread_rng())
+    }
+
+    /// [`perturb_engine`](Self::perturb_engine) with a caller-supplied RNG.
+    pub fn perturb_engine_with_rng<R: Rng>(&self, engine: &Engine, rng: &mut R) -> Engine {
+        let isp = self.factor(self.uncertainty.isp_percent, rng);
+        let thrust = self.factor(self.uncertainty.thrust_percent, rng);
         Engine::new(
             engine.name.clone(),
-            self.perturb_thrust(engine.thrust_sl()),
-            self.perturb_thrust(engine.thrust_vac()),
-            self.perturb_isp(engine.isp_sl()),
-            self.perturb_isp(engine.isp_vac()),
+            engine.thrust_sl() * thrust,
+            engine.thrust_vac() * thrust,
+            Isp::seconds(engine.isp_sl().as_seconds() * isp),
+            Isp::seconds(engine.isp_vac().as_seconds() * isp),
             engine.dry_mass(),
             engine.propellant,
         )
+    }
+
+    /// Build a rocket again with as-built errors.
+    ///
+    /// Each stage gets its own engine factors (see
+    /// [`perturb_engine`](Self::perturb_engine)) and a factor on its structural
+    /// mass. Propellant loads, engine counts and payload are unchanged: this
+    /// is the same design, built imperfectly.
+    pub fn perturb_rocket<R: Rng>(&self, rocket: &Rocket, rng: &mut R) -> Rocket {
+        let stages = rocket
+            .stages()
+            .iter()
+            .map(|stage| {
+                let engine = self.perturb_engine_with_rng(stage.engine(), rng);
+                let structure = self.factor(self.uncertainty.structural_percent, rng);
+                Stage::new(
+                    engine,
+                    stage.engine_count(),
+                    stage.propellant_mass(),
+                    stage.structural_mass() * structure,
+                )
+            })
+            .collect();
+        Rocket::new(stages, rocket.payload()).with_booster_isp(rocket.booster_isp())
+    }
+
+    /// Draw a multiplicative factor N(1, percent/100), or exactly 1 for zero.
+    fn factor<R: Rng>(&self, percent: f64, rng: &mut R) -> f64 {
+        if percent == 0.0 {
+            1.0
+        } else {
+            self.sample_factor_with_rng(percent, rng)
+        }
     }
 
     /// Sample a multiplicative factor from normal distribution.
@@ -267,6 +317,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn uncertainty_custom() {
         let u = Uncertainty::new(2.0, 8.0, 3.0);
         assert!((u.isp_percent - 2.0).abs() < 0.001);
@@ -391,7 +442,10 @@ mod tests {
         assert_eq!(perturbed.propellant, engine.propellant);
         assert_eq!(perturbed.dry_mass().as_kg(), engine.dry_mass().as_kg());
 
-        // ISP and thrust should be different (almost certainly)
-        // Note: There's a tiny chance they could be identical, but very unlikely
+        // Sea-level and vacuum values move together
+        let isp_ratio = perturbed.isp_sl().as_seconds() / perturbed.isp_vac().as_seconds();
+        assert!((isp_ratio - 300.0 / 350.0).abs() < 1e-12);
+        let thrust_ratio = perturbed.thrust_sl().as_newtons() / perturbed.thrust_vac().as_newtons();
+        assert!((thrust_ratio - 1.0 / 1.1).abs() < 1e-12);
     }
 }

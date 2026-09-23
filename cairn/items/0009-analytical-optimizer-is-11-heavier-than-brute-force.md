@@ -2,12 +2,14 @@
 id: 9
 title: Analytical optimizer is 11% heavier than brute force
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 depends_on:
 - 8
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p0
 effort: l
 area: optimizer
@@ -37,7 +39,15 @@ rustdoc. It is the most educational code in the crate and should read that way.
 
 ## Acceptance criteria
 
-- [ ] Analytical ≤ brute force + 1% on the README example and on the property test below
-- [ ] Engine-count search is bounded; no `loop` without an exit
-- [ ] Works for N stages, not just 2
-- [ ] Rustdoc derivation with the textbook reference (Curtis, *Orbital Mechanics for Engineering Students*, §11.6)
+- [x] Analytical ≤ brute force + 1% on the README example and on the property test below
+- [x] Engine-count search is bounded; no `loop` without an exit
+- [x] Works for N stages, not just 2
+- [x] Rustdoc derivation with the textbook reference (Curtis, *Orbital Mechanics for Engineering Students*, §11.6)
+
+## 2026-09-22
+
+Lagrange multiplier split (Curtis §11.6) as the start, then pairwise scan + golden-section refinement against the exact mass model with engine mass. Engine counts come from a closed-form TWR bound (src/optimizer/sizing.rs), so no engine-count loops remain. Handles any stage count and every engine-to-stage assignment. README example: 188.9 t, split 4,407/4,993 m/s under the new ascent-averaged booster Isp. Stress-tested against brute force over 300 random cases: analytical never more than 1% heavier.
+
+## 2026-09-22
+
+Found while validating on Saturn V: with no floor on first-stage delta-v, the optimum degenerates to a propellant-free 'booster' that supplies liftoff thrust while vacuum-only upper stages do everything from sea level. Added Constraints::min_booster_delta_v (2,000 m/s, Earth launches with 2+ stages only).

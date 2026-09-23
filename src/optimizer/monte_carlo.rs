@@ -1,31 +1,50 @@
 //! Monte Carlo simulation for uncertainty analysis.
 //!
-//! Monte Carlo simulation runs the optimizer many times with randomly
-//! perturbed parameters to understand how uncertainties propagate to
-//! the final solution.
+//! A design on paper hits its target exactly. The rocket that gets built
+//! won't: engines come off the line a percent or so off their rated Isp,
+//! welds and wiring make the structure heavier or lighter than drawn, and
+//! thrust varies with chamber pressure. Monte Carlo analysis asks how
+//! often *this design*, built with those errors, still does its job.
 //!
 //! # How It Works
 //!
-//! 1. Start with nominal engine parameters and structural ratio
-//! 2. For each iteration:
-//!    - Sample perturbed parameters from their distributions
-//!    - Re-optimize with perturbed parameters
-//!    - Record the resulting delta-v and mass
-//! 3. Analyze the distribution of results
+//! 1. Optimize the nominal problem, or take a design you already have.
+//! 2. For each iteration, build the design again with every stage's as-built
+//!    parameters drawn from their distributions:
+//!    - one Isp factor per stage, scaling sea-level and vacuum Isp together
+//!      (a worse engine is worse at every altitude)
+//!    - one thrust factor per stage, likewise
+//!    - one factor on each stage's structural mass
+//! 3. Evaluate the delta-v and liftoff TWR of each build.
+//!
+//! The design itself never changes between samples. Earlier versions of tsi
+//! re-optimized every sample, which measured whether *some* rocket could be
+//! found under perturbed parameters. That is a different question, and it
+//! always came out "yes".
+//!
+//! # Reproducibility
+//!
+//! Every run has a seed, reported in the results. Each sample draws from its
+//! own generator seeded by (seed, sample index), so the same seed gives
+//! bit-identical results however many threads rayon uses.
 //!
 //! # Interpreting Results
 //!
-//! The Monte Carlo results show:
-//! - **Success probability**: % of runs achieving target delta-v
-//! - **Confidence intervals**: Range of expected performance
-//! - **Margin requirements**: How much extra delta-v to budget
+//! - **Success probability**: fraction of builds reaching the target delta-v
+//!   that can also lift off (liftoff TWR > 1)
+//! - **Confidence intervals**: range of delta-v the builds achieve
+//! - **Required margin**: how much delta-v to design in for a given confidence
+//!
+//! A zero-margin design succeeds about half the time, since half of all builds
+//! come out below nominal. Adding margin ([`Constraints::margin`]) is how a
+//! design buys confidence.
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```
 //! use tsi::optimizer::{Problem, Constraints, Uncertainty, MonteCarloRunner};
 //! use tsi::engine::EngineDatabase;
-//! use tsi::units::{Mass, Velocity};
+//! use tsi::units::{Mass, Ratio, Velocity};
 //!
 //! let db = EngineDatabase::load_embedded().expect("load db");
 //! let engine = db.get("raptor-2").expect("engine");
@@ -34,49 +53,50 @@
 //!     Mass::kg(5_000.0),
 //!     Velocity::mps(9_400.0),
 //!     vec![engine.clone()],
-//!     Constraints::default(),
+//!     Constraints::default().with_margin(Ratio::new(0.02)),
 //! ).with_stage_count(2);
 //!
-//! let runner = MonteCarloRunner::new(Uncertainty::default());
+//! let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(42);
 //! let results = runner.run(&problem, 1000).expect("monte carlo");
 //!
-//! println!("Success probability: {:.1}%", results.success_probability() * 100.0);
+//! // 2% margin covers most, but not all, manufacturing variation
+//! assert!(results.success_probability() > 0.9);
 //! println!("Delta-v 5th percentile: {:.0} m/s", results.delta_v_percentile(5.0));
 //! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use rayon::prelude::*;
 use serde::Serialize;
 
+use super::solution::DELTA_V_TOLERANCE_MPS;
 use super::{
-    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer,
-    ParameterSampler, Problem, Solution, Uncertainty,
+    AnalyticalOptimizer, OptimizeError, Optimizer, ParameterSampler, Problem, Solution, Uncertainty,
 };
-use crate::engine::Engine;
 use crate::units::Velocity;
 
 /// Results from a Monte Carlo simulation.
 ///
-/// Contains the distribution of outcomes from running the optimizer
-/// many times with perturbed parameters.
+/// Contains the distribution of outcomes from building one design many
+/// times with perturbed parameters.
 #[derive(Debug, Clone)]
 pub struct MonteCarloResults {
-    /// Delta-v achieved in each successful run (m/s)
+    /// Delta-v achieved by each build (m/s)
     pub delta_v_samples: Vec<f64>,
 
-    /// Total mass in each successful run (kg)
+    /// Liftoff mass of each build (kg)
     pub mass_samples: Vec<f64>,
 
-    /// Number of runs that achieved target delta-v
+    /// Builds that reached the target delta-v and could lift off
     pub successes: u64,
 
-    /// Total number of runs attempted
+    /// Total number of builds evaluated
     pub total_runs: u64,
 
-    /// Number of runs that failed to find a feasible solution
+    /// Builds too heavy for their thrust to leave the pad (liftoff TWR ≤ 1)
     pub failures: u64,
 
     /// Target delta-v used for success calculation
@@ -85,8 +105,11 @@ pub struct MonteCarloResults {
     /// Time taken to run the simulation
     pub runtime: Duration,
 
-    /// The nominal (unperturbed) solution for reference
+    /// The design that was stressed
     pub nominal_solution: Solution,
+
+    /// Seed that reproduces this run with [`MonteCarloRunner::with_seed`]
+    pub seed: u64,
 }
 
 impl MonteCarloResults {
@@ -237,6 +260,9 @@ impl MonteCarloResults {
                     .fold(f64::NEG_INFINITY, f64::max),
             },
             required_margin_95_mps: self.required_margin(0.95),
+            seed: self.seed,
+            design_total_mass_kg: self.nominal_solution.rocket.total_mass().as_kg(),
+            design_stage_count: self.nominal_solution.rocket.stage_count(),
         }
     }
 }
@@ -270,6 +296,15 @@ pub struct MonteCarloJsonSummary {
 
     /// Additional margin needed for 95% confidence (m/s)
     pub required_margin_95_mps: f64,
+
+    /// Seed that reproduces this run
+    pub seed: u64,
+
+    /// Liftoff mass of the design that was stressed (kg)
+    pub design_total_mass_kg: f64,
+
+    /// Number of stages in the design that was stressed
+    pub design_stage_count: usize,
 }
 
 /// Summary statistics for a distribution.
@@ -304,7 +339,7 @@ fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
     }
 
     let mut sorted = samples.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(f64::total_cmp);
 
     let p = percentile.clamp(0.0, 100.0) / 100.0;
     let idx = (p * (sorted.len() - 1) as f64).round() as usize;
@@ -313,12 +348,13 @@ fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
 
 /// Monte Carlo simulation runner.
 ///
-/// Runs multiple optimization iterations with perturbed parameters
-/// to assess the robustness of a rocket design.
+/// Builds a fixed design many times with perturbed as-built parameters and
+/// measures how often it still meets its target.
 #[derive(Debug, Clone)]
 pub struct MonteCarloRunner {
     uncertainty: Uncertainty,
     show_progress: bool,
+    seed: Option<u64>,
 }
 
 impl MonteCarloRunner {
@@ -327,6 +363,7 @@ impl MonteCarloRunner {
         Self {
             uncertainty,
             show_progress: false,
+            seed: None,
         }
     }
 
@@ -336,150 +373,125 @@ impl MonteCarloRunner {
         self
     }
 
-    /// Run Monte Carlo simulation.
+    /// Use a fixed seed, making results reproducible.
     ///
-    /// # Arguments
-    ///
-    /// * `problem` - The nominal optimization problem
-    /// * `iterations` - Number of Monte Carlo iterations
-    ///
-    /// # Returns
-    ///
-    /// Results containing distributions and statistics.
+    /// Without one, a random seed is chosen and reported in
+    /// [`MonteCarloResults::seed`], so any run can be repeated later.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// Optimize the problem, then stress the resulting design.
     ///
     /// # Errors
     ///
-    /// Returns an error if the nominal problem is invalid.
+    /// Returns an error if the problem is invalid or has no solution.
     pub fn run(
         &self,
         problem: &Problem,
         iterations: u64,
     ) -> Result<MonteCarloResults, OptimizeError> {
-        // Validate the nominal problem first
-        problem.is_valid()?;
+        let nominal = AnalyticalOptimizer.optimize(problem)?;
+        Ok(self.run_design(&nominal, iterations))
+    }
 
+    /// Stress an existing design: build it `iterations` times with
+    /// perturbed parameters and evaluate each build against the design's
+    /// target delta-v.
+    pub fn run_design(&self, design: &Solution, iterations: u64) -> MonteCarloResults {
         let start = Instant::now();
+        let seed = self.seed.unwrap_or_else(rand::random);
+        let target = design.target_delta_v;
+        let nominal = &design.rocket;
 
-        // Run nominal optimization to get baseline
-        let nominal_solution = self.optimize_problem(problem)?;
-
-        // If zero uncertainty, just return nominal result
-        if self.uncertainty.is_zero() {
-            return Ok(MonteCarloResults {
-                delta_v_samples: vec![nominal_solution.rocket.total_delta_v().as_mps()],
-                mass_samples: vec![nominal_solution.rocket.total_mass().as_kg()],
-                successes: 1,
+        if self.uncertainty.is_zero() || iterations == 0 {
+            let dv = nominal.total_delta_v().as_mps();
+            let lifts_off = nominal.liftoff_twr().as_f64() > 1.0;
+            let success = dv >= target.as_mps() - DELTA_V_TOLERANCE_MPS && lifts_off;
+            return MonteCarloResults {
+                delta_v_samples: vec![dv],
+                mass_samples: vec![nominal.total_mass().as_kg()],
+                successes: u64::from(success),
                 total_runs: 1,
-                failures: 0,
-                target_delta_v: problem.target_delta_v,
+                failures: u64::from(!lifts_off),
+                target_delta_v: target,
                 runtime: start.elapsed(),
-                nominal_solution,
-            });
+                nominal_solution: design.clone(),
+                seed,
+            };
         }
 
-        // Parallel Monte Carlo
         let sampler = ParameterSampler::new(self.uncertainty);
-        let target_dv = problem.target_delta_v.as_mps();
-
-        // Shared state for results
-        let delta_v_samples = Arc::new(Mutex::new(Vec::with_capacity(iterations as usize)));
-        let mass_samples = Arc::new(Mutex::new(Vec::with_capacity(iterations as usize)));
-        let successes = AtomicU64::new(0);
-        let failures = AtomicU64::new(0);
         let completed = AtomicU64::new(0);
 
-        // Run parallel iterations
-        (0..iterations).into_par_iter().for_each(|_| {
-            // Perturb engines
-            let perturbed_engines: Vec<Engine> = problem
-                .available_engines
-                .iter()
-                .map(|e| sampler.perturb_engine(e))
-                .collect();
+        let samples: Vec<Sample> = (0..iterations)
+            .into_par_iter()
+            .map(|i| {
+                let mut rng = StdRng::seed_from_u64(sample_seed(seed, i));
+                let built = sampler.perturb_rocket(nominal, &mut rng);
+                let sample = Sample {
+                    delta_v: built.total_delta_v().as_mps(),
+                    mass: built.total_mass().as_kg(),
+                    lifts_off: built.liftoff_twr().as_f64() > 1.0,
+                };
 
-            // Perturb structural ratio
-            let perturbed_structural =
-                sampler.perturb_structural_ratio(problem.constraints.structural_ratio);
-
-            // Create perturbed problem
-            let perturbed_constraints = Constraints {
-                structural_ratio: perturbed_structural,
-                ..problem.constraints.clone()
-            };
-
-            let perturbed_problem = Problem {
-                payload: problem.payload,
-                target_delta_v: problem.target_delta_v,
-                available_engines: perturbed_engines,
-                constraints: perturbed_constraints,
-                stage_count: problem.stage_count,
-            };
-
-            // Run optimization
-            match self.optimize_problem(&perturbed_problem) {
-                Ok(solution) => {
-                    let dv = solution.rocket.total_delta_v().as_mps();
-                    let mass = solution.rocket.total_mass().as_kg();
-
-                    // Record results
-                    delta_v_samples.lock().unwrap().push(dv);
-                    mass_samples.lock().unwrap().push(mass);
-
-                    // Count success if meets target
-                    if dv >= target_dv {
-                        successes.fetch_add(1, Ordering::Relaxed);
+                if self.show_progress {
+                    let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+                    if done.is_multiple_of((iterations / 100).max(1)) {
+                        let pct = done as f64 / iterations as f64 * 100.0;
+                        eprint!("\rMonte Carlo: {pct:.0}% ({done}/{iterations})");
                     }
                 }
-                Err(_) => {
-                    failures.fetch_add(1, Ordering::Relaxed);
-                }
-            }
-
-            // Progress reporting
-            let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-            if self.show_progress && done.is_multiple_of(100) {
-                let pct = (done as f64 / iterations as f64) * 100.0;
-                eprint!("\rMonte Carlo: {:.0}% ({}/{})", pct, done, iterations);
-            }
-        });
+                sample
+            })
+            .collect();
 
         if self.show_progress {
-            eprintln!("\rMonte Carlo: 100% ({}/{})", iterations, iterations);
+            eprintln!("\rMonte Carlo: 100% ({iterations}/{iterations})");
         }
 
-        Ok(MonteCarloResults {
-            delta_v_samples: Arc::try_unwrap(delta_v_samples)
-                .unwrap()
-                .into_inner()
-                .unwrap(),
-            mass_samples: Arc::try_unwrap(mass_samples).unwrap().into_inner().unwrap(),
-            successes: successes.load(Ordering::Relaxed),
+        let successes = samples
+            .iter()
+            .filter(|s| s.lifts_off && s.delta_v >= target.as_mps())
+            .count() as u64;
+        let failures = samples.iter().filter(|s| !s.lifts_off).count() as u64;
+
+        MonteCarloResults {
+            delta_v_samples: samples.iter().map(|s| s.delta_v).collect(),
+            mass_samples: samples.iter().map(|s| s.mass).collect(),
+            successes,
             total_runs: iterations,
-            failures: failures.load(Ordering::Relaxed),
-            target_delta_v: problem.target_delta_v,
+            failures,
+            target_delta_v: target,
             runtime: start.elapsed(),
-            nominal_solution,
-        })
-    }
-
-    /// Run optimization on a problem, selecting appropriate optimizer.
-    fn optimize_problem(&self, problem: &Problem) -> Result<Solution, OptimizeError> {
-        // Use analytical for simple 2-stage single-engine, brute force otherwise
-        if problem.is_single_engine() && problem.stage_count == Some(2) {
-            let optimizer = AnalyticalOptimizer;
-            optimizer.optimize(problem)
-        } else {
-            let optimizer = BruteForceOptimizer::default();
-            optimizer.optimize(problem)
+            nominal_solution: design.clone(),
+            seed,
         }
     }
+}
+
+/// One perturbed build of the design.
+struct Sample {
+    delta_v: f64,
+    mass: f64,
+    lifts_off: bool,
+}
+
+/// Derive an independent, well-mixed seed for one sample (SplitMix64).
+fn sample_seed(seed: u64, index: u64) -> u64 {
+    let mut z = seed ^ index.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::EngineDatabase;
-    use crate::units::Mass;
+    use crate::engine::{Engine, EngineDatabase};
+    use crate::optimizer::Constraints;
+    use crate::units::{Mass, Ratio};
 
     fn get_raptor() -> Engine {
         let db = EngineDatabase::default();
@@ -512,32 +524,70 @@ mod tests {
     }
 
     #[test]
-    fn monte_carlo_with_uncertainty() {
-        let runner = MonteCarloRunner::new(Uncertainty::default());
-        let problem = simple_problem();
+    fn zero_margin_design_succeeds_about_half_the_time() {
+        // Half of all builds come out below nominal, so a design with no
+        // margin should fail roughly half the time. v0.6 reported 100%.
+        let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(1);
+        let results = runner.run(&simple_problem(), 2_000).unwrap();
 
-        let results = runner
-            .run(&problem, 100)
-            .expect("monte carlo should succeed");
+        assert_eq!(results.total_runs, 2_000);
+        let p = results.success_probability();
+        assert!((0.3..0.7).contains(&p), "success probability {p}");
+        let mean = results.mean_delta_v();
+        assert!((mean - 9_400.0).abs() < 50.0, "mean delta-v {mean}");
+    }
 
-        // Should have completed 100 runs
-        assert_eq!(results.total_runs, 100);
+    #[test]
+    fn margin_buys_confidence() {
+        let mut problem = simple_problem();
+        problem.constraints = Constraints::default().with_margin(Ratio::new(0.03));
+        let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(1);
+        let results = runner.run(&problem, 2_000).unwrap();
+        assert!(results.success_probability() > 0.95);
+    }
 
-        // Most runs should succeed (design has margin)
-        assert!(
-            results.success_probability() > 0.5,
-            "Expected >50% success, got {:.1}%",
-            results.success_probability() * 100.0
+    #[test]
+    fn stresses_the_design_it_was_given() {
+        let design = AnalyticalOptimizer.optimize(&simple_problem()).unwrap();
+        let results = MonteCarloRunner::new(Uncertainty::default())
+            .with_seed(7)
+            .run_design(&design, 200);
+        assert_eq!(
+            results.nominal_solution.rocket.total_mass().as_kg(),
+            design.rocket.total_mass().as_kg()
         );
+        // Only structure is perturbed, so liftoff mass stays within a few
+        // percent of nominal rather than being re-optimized each time.
+        let nominal = design.rocket.total_mass().as_kg();
+        for &m in &results.mass_samples {
+            assert!((m / nominal - 1.0).abs() < 0.05, "{m} vs {nominal}");
+        }
+    }
 
-        // Delta-v samples should be reasonable
-        assert!(!results.delta_v_samples.is_empty());
-        let mean_dv = results.mean_delta_v();
-        assert!(
-            mean_dv > 9000.0 && mean_dv < 11000.0,
-            "Mean delta-v {} outside expected range",
-            mean_dv
-        );
+    #[test]
+    fn seed_makes_runs_reproducible_across_thread_counts() {
+        let design = AnalyticalOptimizer.optimize(&simple_problem()).unwrap();
+        let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(42);
+        let many = runner.run_design(&design, 500);
+        let one = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap()
+            .install(|| runner.run_design(&design, 500));
+
+        assert_eq!(many.seed, 42);
+        assert_eq!(many.delta_v_samples, one.delta_v_samples);
+        assert_eq!(many.successes, one.successes);
+    }
+
+    #[test]
+    fn unseeded_runs_report_their_seed() {
+        let design = AnalyticalOptimizer.optimize(&simple_problem()).unwrap();
+        let first = MonteCarloRunner::new(Uncertainty::default()).run_design(&design, 100);
+        let again = MonteCarloRunner::new(Uncertainty::default())
+            .with_seed(first.seed)
+            .run_design(&design, 100);
+        assert_eq!(first.delta_v_samples, again.delta_v_samples);
     }
 
     #[test]
@@ -579,11 +629,13 @@ mod tests {
             runtime: Duration::from_secs(1),
             nominal_solution: Solution {
                 rocket,
+                target_delta_v: Velocity::mps(9500.0),
                 margin: Velocity::mps(100.0),
                 iterations: 1,
                 runtime: Duration::from_secs(0),
                 optimizer_name: "test".to_string(),
             },
+            seed: 0,
         };
 
         assert!((results.success_probability() - 0.8).abs() < 0.01);

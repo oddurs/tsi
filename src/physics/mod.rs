@@ -7,6 +7,7 @@
 //! - [`twr`] - Thrust-to-weight ratio calculation
 //! - [`burn_time`] - Engine burn duration
 //! - [`losses`] - Atmospheric and gravity loss estimation
+//! - [`IspModel`] - How Isp varies as a first stage climbs out of the atmosphere
 //!
 //! # Constants
 //!
@@ -39,10 +40,12 @@
 //! println!("Burn time: {}", burn);       // ~2m 51s
 //! ```
 
+mod isp_model;
 pub mod losses;
 mod thrust;
 mod tsiolkovsky;
 
+pub use isp_model::{IspModel, ASCENT_MEAN_PRESSURE_RATIO};
 pub use thrust::{burn_time, twr};
 pub use tsiolkovsky::{delta_v, required_mass_ratio};
 

@@ -2,10 +2,12 @@
 id: 18
 title: NaN and infinite inputs pass validation
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p1
 effort: s
 area: optimizer
@@ -15,5 +17,5 @@ area: optimizer
 
 ## Acceptance criteria
 
-- [ ] Every numeric input rejects NaN, ±∞ and non-positive values with a named error
-- [ ] Proptest over arbitrary f64 inputs: validation either rejects or the optimizer returns a finite solution
+- [x] Every numeric input rejects NaN, ±∞ and non-positive values with a named error
+- [x] Proptest over arbitrary f64 inputs: validation either rejects or the optimizer returns a finite solution

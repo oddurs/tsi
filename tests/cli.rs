@@ -907,3 +907,355 @@ fn completions_man_page() {
         .stdout(predicate::str::contains(".TH tsi"))
         .stdout(predicate::str::contains("SYNOPSIS"));
 }
+
+// ============================================================================
+// v0.7: stage counts, pinning, gravity, TWR reporting, input validation
+// ============================================================================
+
+/// Run `tsi optimize` with JSON output and parse the result.
+fn optimize_json(args: &[&str]) -> serde_json::Value {
+    let output = tsi()
+        .arg("optimize")
+        .args(args)
+        .args(["--output", "json", "--quiet"])
+        .output()
+        .expect("failed to run");
+    assert!(
+        output.status.success(),
+        "tsi failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("invalid JSON output")
+}
+
+fn stage_engines(json: &serde_json::Value) -> Vec<String> {
+    json["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["engine"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn max_stages_is_a_maximum_not_an_exact_count() {
+    // 3 km/s is well within one stage's reach; a second stage is dead weight.
+    let json = optimize_json(&[
+        "--payload",
+        "1000",
+        "--target-dv",
+        "3000",
+        "--engine",
+        "raptor-2",
+        "--max-stages",
+        "3",
+    ]);
+    assert_eq!(json["stages"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn stages_flag_fixes_the_count() {
+    let json = optimize_json(&[
+        "--payload",
+        "1000",
+        "--target-dv",
+        "3000",
+        "--engine",
+        "raptor-2",
+        "--stages",
+        "2",
+    ]);
+    assert_eq!(json["stages"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn stage1_engine_is_pinned() {
+    // v0.6 added the pinned engine to the pool and then ignored it.
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--stage1-engine",
+        "merlin-1d",
+    ]);
+    assert_eq!(stage_engines(&json), ["Merlin-1D", "Raptor-2"]);
+}
+
+#[test]
+fn stage2_engine_is_pinned() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "merlin-1d",
+        "--stage2-engine",
+        "raptor-2",
+    ]);
+    assert_eq!(stage_engines(&json), ["Merlin-1D", "Raptor-2"]);
+}
+
+#[test]
+fn pinned_engines_work_with_brute_force() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--stage1-engine",
+        "merlin-1d",
+        "--optimizer",
+        "brute-force",
+    ]);
+    assert_eq!(stage_engines(&json)[0], "Merlin-1D");
+}
+
+#[test]
+fn gravity_reaches_the_optimizer() {
+    // On Mars a Raptor lifts about 2.6× as much, so the booster needs fewer
+    // engines, and with no air to fly through the rocket is lighter.
+    let args = [
+        "--payload",
+        "50000",
+        "--target-dv",
+        "4500",
+        "--engine",
+        "raptor-2",
+    ];
+    let earth = optimize_json(&args);
+    let mut mars_args = args.to_vec();
+    mars_args.extend(["--gravity", "mars"]);
+    let mars = optimize_json(&mars_args);
+
+    let engines = |j: &serde_json::Value| j["stages"][0]["engine_count"].as_u64().unwrap();
+    assert!(engines(&mars) < engines(&earth));
+    assert!(mars["total_mass_kg"].as_f64() < earth["total_mass_kg"].as_f64());
+    assert_eq!(mars["booster_isp_model"], "vacuum");
+    assert_eq!(earth["booster_isp_model"], "ascent-averaged");
+}
+
+#[test]
+fn sea_level_flag_is_accepted_but_deprecated() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--sea-level",
+            "--quiet",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("deprecated"));
+}
+
+#[test]
+fn json_distinguishes_liftoff_and_ignition_twr() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+    ]);
+    let s1 = &json["stages"][0];
+    let s2 = &json["stages"][1];
+    let liftoff = s1["twr_liftoff"].as_f64().unwrap();
+    let ignition = s1["twr_ignition"].as_f64().unwrap();
+    // Liftoff uses sea-level thrust, so it is lower than the vacuum figure.
+    assert!(
+        liftoff >= 1.2 && liftoff < ignition,
+        "{liftoff} vs {ignition}"
+    );
+    assert!(s2["twr_liftoff"].is_null());
+    assert!(s2["twr_ignition"].as_f64().unwrap() >= 0.5);
+    assert!(s1.get("twr").is_none());
+}
+
+#[test]
+fn pretty_output_labels_twr() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("at liftoff"))
+        .stdout(predicate::str::contains("at ignition"));
+}
+
+#[test]
+fn zero_margin_by_default() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+    ]);
+    assert!(json["margin_mps"].as_f64().unwrap().abs() < 0.01);
+}
+
+#[test]
+fn margin_flag_accepts_percent() {
+    for margin in ["2", "2%"] {
+        let json = optimize_json(&[
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--margin",
+            margin,
+        ]);
+        let m = json["margin_mps"].as_f64().unwrap();
+        assert!((m - 188.0).abs() < 0.01, "--margin {margin}: {m}");
+        assert_eq!(json["design_margin_percent"].as_f64(), Some(2.0));
+    }
+}
+
+#[test]
+fn max_engines_flag_allows_super_heavy() {
+    let base = [
+        "--payload",
+        "100000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+    ];
+    tsi()
+        .arg("optimize")
+        .args(base)
+        .arg("--quiet")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--max-engines"));
+    let mut args = base.to_vec();
+    args.extend(["--max-engines", "40"]);
+    let json = optimize_json(&args);
+    assert!(json["stages"][0]["engine_count"].as_u64().unwrap() > 9);
+}
+
+#[test]
+fn nan_and_infinite_inputs_are_rejected_by_name() {
+    for (flag, value) in [
+        ("--payload", "NaN"),
+        ("--payload", "inf"),
+        ("--target-dv", "NaN"),
+        ("--target-dv", "-inf"),
+    ] {
+        let mut args = vec![
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+        ];
+        let at = args.iter().position(|a| *a == flag).unwrap();
+        args[at + 1] = value;
+        tsi()
+            .args(&args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(flag));
+    }
+}
+
+#[test]
+fn monte_carlo_seed_is_reproducible() {
+    let run = || {
+        optimize_json(&[
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--monte-carlo",
+            "500",
+            "--seed",
+            "42",
+        ])["monte_carlo"]
+            .clone()
+    };
+    let (a, b) = (run(), run());
+    assert_eq!(a["seed"], 42);
+    assert_eq!(a["delta_v"], b["delta_v"]);
+    assert_eq!(a["successes"], b["successes"]);
+}
+
+#[test]
+fn monte_carlo_stresses_the_reported_design() {
+    let json = optimize_json(&[
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--monte-carlo",
+        "500",
+    ]);
+    let mc = &json["monte_carlo"];
+    assert_eq!(mc["design_total_mass_kg"], json["total_mass_kg"]);
+    // Zero margin: builds fall short about half the time.
+    let p = mc["success_probability"].as_f64().unwrap();
+    assert!((0.3..0.7).contains(&p), "{p}");
+}
+
+#[test]
+fn calculate_rejects_nan_and_infinity() {
+    for args in [
+        ["--isp", "NaN", "--mass-ratio", "3"],
+        ["--isp", "inf", "--mass-ratio", "3"],
+        ["--isp", "300", "--mass-ratio", "NaN"],
+    ] {
+        tsi()
+            .arg("calculate")
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid arguments"));
+    }
+}
+
+#[test]
+fn custom_engine_rejects_nan() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "x",
+            "--custom-engine",
+            "x:NaN:350:1500:loxch4",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Thrust must be positive"));
+}

@@ -4,7 +4,7 @@
 //! This module calculates stage performance including delta-v, TWR, and burn time.
 
 use crate::engine::Engine;
-use crate::physics::{burn_time, delta_v, twr};
+use crate::physics::{burn_time, delta_v, twr, IspModel};
 use crate::units::{Force, Isp, Mass, Ratio, Time, Velocity};
 
 /// A rocket stage with engine(s), propellant, and structure.
@@ -188,10 +188,18 @@ impl Stage {
     /// The payload "eats into" the mass ratio, reducing available delta-v.
     /// This is why upper stages want to be as light as possible.
     pub fn delta_v_with_payload(&self, payload: Mass) -> Velocity {
+        self.delta_v_with(payload, IspModel::Vacuum)
+    }
+
+    /// Delta-v carrying `payload`, with Isp evaluated under `isp_model`.
+    ///
+    /// A first stage flown from sea level delivers less than its vacuum
+    /// delta-v because it spends the first part of its burn in thick air.
+    /// See [`IspModel`] for how much less, and why.
+    pub fn delta_v_with(&self, payload: Mass, isp_model: IspModel) -> Velocity {
         let wet = self.wet_mass() + payload;
         let dry = self.dry_mass() + payload;
-        let ratio = wet / dry;
-        delta_v(self.isp_vac(), ratio)
+        delta_v(self.engine.isp_for(isp_model), wet / dry)
     }
 
     /// Thrust-to-weight ratio at ignition in vacuum.

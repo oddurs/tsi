@@ -2,12 +2,14 @@
 id: 11
 title: Monte Carlo re-optimizes each sample instead of stressing one design
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 depends_on:
 - 8
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p0
 effort: l
 area: optimizer
@@ -32,7 +34,7 @@ both its sea-level and vacuum Isp.
 
 ## Acceptance criteria
 
-- [ ] Success probability < 1.0 for a zero-margin design under default uncertainty
-- [ ] `--seed N` gives bit-identical results across runs and thread counts
-- [ ] Property test: sampled isp_sl ≤ isp_vac always
-- [ ] Output says which design was stressed
+- [x] Success probability < 1.0 for a zero-margin design under default uncertainty
+- [x] `--seed N` gives bit-identical results across runs and thread counts
+- [x] Property test: sampled isp_sl ≤ isp_vac always
+- [x] Output says which design was stressed

@@ -171,11 +171,11 @@ pub struct OptimizeArgs {
     #[arg(short, long)]
     pub engine: String,
 
-    /// Force specific engine for first stage (overrides --engine for stage 1)
+    /// Use this engine on the first stage (the other stages choose from --engine)
     #[arg(long)]
     pub stage1_engine: Option<String>,
 
-    /// Force specific engine for second stage (overrides --engine for stage 2)
+    /// Use this engine on the second stage (the other stages choose from --engine)
     #[arg(long)]
     pub stage2_engine: Option<String>,
 
@@ -187,19 +187,32 @@ pub struct OptimizeArgs {
     #[arg(long, default_value = "0.5")]
     pub min_upper_twr: f64,
 
-    /// Maximum number of stages
+    /// Maximum number of stages (tries every count from 1 up to this)
     #[arg(long, default_value = "2")]
     pub max_stages: u32,
+
+    /// Exact number of stages (overrides --max-stages)
+    #[arg(long, value_name = "N")]
+    pub stages: Option<u32>,
+
+    /// Maximum engines per stage
+    #[arg(long, default_value = "9")]
+    pub max_engines: u32,
 
     /// Structural mass ratio (structural / propellant)
     #[arg(long, default_value = "0.08")]
     pub structural_ratio: f64,
 
-    /// Use sea-level thrust/ISP for first stage TWR calculation
-    #[arg(long)]
+    /// Extra delta-v to design for, in percent of the target (e.g. 2 or 2%)
+    #[arg(long, default_value = "0", value_parser = parse_percent)]
+    pub margin: f64,
+
+    /// Deprecated: liftoff TWR now always uses sea-level thrust
+    #[arg(long, hide = true)]
     pub sea_level: bool,
 
-    /// Surface gravity (affects TWR calculation)
+    /// Launch body: sets surface gravity for TWR, and whether the first stage
+    /// flies through an atmosphere (Earth) or not (Mars, Moon)
     #[arg(long, value_enum, default_value = "earth")]
     pub gravity: Gravity,
 
@@ -219,9 +232,13 @@ pub struct OptimizeArgs {
     #[arg(long, value_name = "N")]
     pub monte_carlo: Option<u64>,
 
-    /// Uncertainty level for Monte Carlo (low, default, high, or custom ISP%)
+    /// Uncertainty level for Monte Carlo
     #[arg(long, value_enum, default_value = "default")]
     pub uncertainty: UncertaintyLevel,
+
+    /// Seed for Monte Carlo sampling (the seed used is always reported)
+    #[arg(long)]
+    pub seed: Option<u64>,
 
     /// Show ASCII rocket diagram
     #[arg(long)]
@@ -288,6 +305,29 @@ impl Gravity {
             Gravity::Moon => 1.62,
         }
     }
+
+    /// How the first stage's Isp behaves on this body.
+    ///
+    /// Mars's surface pressure is under 1% of Earth's and the Moon has none,
+    /// so a first stage there performs as if in vacuum.
+    pub fn booster_isp(&self) -> crate::physics::IspModel {
+        match self {
+            Gravity::Earth => crate::physics::IspModel::AscentAveraged,
+            Gravity::Mars | Gravity::Moon => crate::physics::IspModel::Vacuum,
+        }
+    }
+}
+
+/// Parse a percentage such as `2`, `2.5` or `2%` into a fraction (0.02).
+fn parse_percent(s: &str) -> Result<f64, String> {
+    let number = s.trim().trim_end_matches('%');
+    let value: f64 = number
+        .parse()
+        .map_err(|_| format!("expected a percentage such as 2 or 2%, got '{s}'"))?;
+    if !(value.is_finite() && value >= 0.0) {
+        return Err(format!("margin must be zero or positive, got '{s}'"));
+    }
+    Ok(value / 100.0)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]

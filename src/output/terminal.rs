@@ -97,26 +97,29 @@ pub fn print_stage_box(
 
 /// Print the complete optimization solution.
 pub fn print_solution(target_dv: f64, payload_kg: f64, solution: &Solution) {
-    print_solution_with_options(target_dv, payload_kg, solution, 9.80665, false);
+    let _ = (target_dv, payload_kg);
+    print_solution_with_options(solution, crate::physics::G0, 0.0);
 }
 
-/// Print the complete optimization solution with gravity and sea-level options.
-pub fn print_solution_with_options(
-    target_dv: f64,
-    payload_kg: f64,
-    solution: &Solution,
-    gravity: f64,
-    sea_level: bool,
-) {
+/// Print the complete optimization solution.
+///
+/// `gravity` is the surface gravity TWR is quoted against, and
+/// `design_margin` the delta-v margin (as a fraction) the rocket was sized
+/// for, shown next to the margin it achieved.
+pub fn print_solution_with_options(solution: &Solution, gravity: f64, design_margin: f64) {
     let rocket = &solution.rocket;
     let stages = rocket.stages();
+    let target_dv = solution.target_delta_v.as_mps();
 
     print_header("tsi — Staging Optimization Complete");
 
     println!();
     print_summary(
         &format!("Target Δv:  {} m/s", format_thousands_f64(target_dv)),
-        &format!("Payload:  {} kg", format_thousands_f64(payload_kg)),
+        &format!(
+            "Payload:  {} kg",
+            format_thousands_f64(rocket.payload().as_kg())
+        ),
     );
     print_summary(
         &format!("Solution:   {}-stage", rocket.stage_count()),
@@ -133,25 +136,12 @@ pub fn print_solution_with_options(
         let stage_name = if i == 0 { "booster" } else { "upper" };
         let stage_dv = rocket.stage_delta_v(i);
 
-        // Calculate TWR based on options
-        let stage_twr = if i == 0 && sea_level {
-            // Use sea-level thrust for first stage
-            let sl_thrust = stage.engine().thrust_sl() * stage.engine_count();
-            let mass_above = rocket.mass_above_stage(i);
-            let total_mass = stage.wet_mass() + mass_above;
-            sl_thrust.as_newtons() / (total_mass.as_kg() * gravity)
+        // The first stage's TWR that matters is at liftoff, with the whole
+        // stack on top; for upper stages, it's at their own ignition.
+        let (stage_twr, twr_label) = if i == 0 {
+            (rocket.liftoff_twr_in(gravity).as_f64(), "at liftoff")
         } else {
-            // Use vacuum thrust (default), adjusted for gravity
-            let vac_thrust = stage.engine().thrust_vac() * stage.engine_count();
-            let mass_above = rocket.mass_above_stage(i);
-            let total_mass = stage.wet_mass() + mass_above;
-            vac_thrust.as_newtons() / (total_mass.as_kg() * gravity)
-        };
-
-        let twr_label = if i == 0 && sea_level {
-            "TWR (SL)"
-        } else {
-            "TWR (vac)"
+            (rocket.stage_twr_in(i, gravity).as_f64(), "at ignition")
         };
 
         print_stage_box_with_twr_label(
@@ -189,10 +179,23 @@ pub fn print_solution_with_options(
         "  Payload fraction:  {:.2}%",
         solution.payload_fraction_percent()
     );
+    let designed = if design_margin > 0.0 {
+        format!(", designed for +{:.1}%", design_margin * 100.0)
+    } else {
+        String::new()
+    };
     println!(
-        "  Delta-v margin:    +{} m/s ({:.1}%)",
-        format_thousands_f64(solution.margin.as_mps()),
-        solution.margin_percent(Velocity::mps(target_dv))
+        "  Delta-v margin:    {:+.0} m/s ({:+.1}%{})",
+        solution.margin.as_mps(),
+        solution.margin_percent(Velocity::mps(target_dv)),
+        designed
+    );
+    let booster_model = rocket.booster_isp();
+    let booster_isp = stages[0].engine().isp_for(booster_model);
+    println!(
+        "  Booster Isp:       {:.0}s ({}); upper stages use vacuum Isp",
+        booster_isp.as_seconds(),
+        booster_model.label()
     );
 
     // Show gravity note if not Earth
@@ -266,7 +269,7 @@ fn print_stage_box_with_twr_label(
     println!("  │  {:<width$}│", bt, width = BOX_WIDTH - 2);
 
     // TWR with custom label
-    let twr_line = format!("{}:   {:.2}", twr_label, twr);
+    let twr_line = format!("TWR:        {:.2} {}", twr, twr_label);
     println!("  │  {:<width$}│", twr_line, width = BOX_WIDTH - 2);
 
     println!("  └{}┘", "─".repeat(BOX_WIDTH));
@@ -302,10 +305,20 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
         "LOW CONFIDENCE"
     };
 
+    let design = &results.nominal_solution.rocket;
+    println!(
+        "  Design stressed:      {}-stage, {} kg (the solution above)",
+        design.stage_count(),
+        format_thousands_f64(design.total_mass().as_kg())
+    );
     println!("  Success probability:  {:.1}% ({}) ", success_pct, status);
     println!(
-        "  Iterations:           {} ({} failed)",
+        "  Builds:               {} ({} too heavy to lift off)",
         results.total_runs, results.failures
+    );
+    println!(
+        "  Seed:                 {} (repeat with --seed {})",
+        results.seed, results.seed
     );
     println!("  Runtime:              {}ms", results.runtime.as_millis());
     println!();

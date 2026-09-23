@@ -9,9 +9,10 @@
 //! - Encyclopedia Astronautica
 
 use approx::assert_relative_eq;
-use tsi::engine::EngineDatabase;
+use tsi::engine::{Engine, EngineDatabase, Propellant};
 use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
-use tsi::physics::{burn_time, delta_v, twr, G0};
+use tsi::physics::{burn_time, delta_v, twr, IspModel, G0};
+use tsi::stage::{Rocket, Stage};
 use tsi::units::{Force, Isp, Mass, Ratio, Velocity};
 
 /// Saturn V first stage (S-IC) - 5x F-1 engines
@@ -88,22 +89,22 @@ fn falcon_9_stage_1_ideal_delta_v() {
     let wet_mass = propellant_mass + dry_mass;
     let mass_ratio = wet_mass / dry_mass;
 
-    // Average Isp during ascent (282s SL, 311s vac)
-    // Weighted toward sea level for first stage
-    let isp = Isp::seconds(297.0);
-
-    let dv = delta_v(isp, mass_ratio);
-
-    // Expected: ~8,700 m/s ideal
+    // tsi's ascent-averaged model: Merlin-1D at the mean pressure a booster
+    // sees on its way up (282 s at sea level, 311 s in vacuum). Falcon 9's
+    // first stage is usually quoted at an average of about 300 s.
+    let merlin = EngineDatabase::default().get("merlin-1d").unwrap().clone();
+    let isp = merlin.isp_for(IspModel::AscentAveraged);
     assert!(
-        dv.as_mps() > 8000.0,
-        "F9 S1 delta-v too low: {}",
-        dv.as_mps()
+        (isp.as_seconds() - 300.0).abs() < 5.0,
+        "F9 S1 effective Isp: {}",
+        isp
     );
+
+    // Isolated (no second stage on top): ~8,700 m/s ideal
+    let dv = delta_v(isp, mass_ratio).as_mps();
     assert!(
-        dv.as_mps() < 9500.0,
-        "F9 S1 delta-v too high: {}",
-        dv.as_mps()
+        (dv / 8_700.0 - 1.0).abs() < 0.03,
+        "F9 S1 isolated delta-v: {dv:.0} m/s"
     );
 }
 
@@ -189,28 +190,28 @@ fn super_heavy_ideal_delta_v() {
     );
 }
 
-/// Verify Falcon 9 total delta-v capability
+/// Falcon 9 stacked ideal delta-v.
 ///
-/// Combined S1 + S2 should achieve LEO with margin.
+/// Stage delta-vs only add up when each stage is computed carrying everything
+/// above it: stage 1 lifts stage 2 and the payload, not just itself. Summing
+/// the isolated stage values (as tsi's v0.6 test did) gives over 18 km/s,
+/// about twice the real figure.
+///
+/// Source: SpaceX Falcon User's Guide (2021) for payload; stage masses from
+/// the SpaceX Falcon 9 page and community compilations.
 #[test]
-fn falcon_9_total_delta_v_leo_capable() {
-    // Stage 1 with expendable profile (more propellant used)
-    let s1_prop = Mass::kg(411_000.0);
-    let s1_dry = Mass::kg(22_200.0);
-    let s1_ratio = (s1_prop + s1_dry) / s1_dry;
-    let s1_dv = delta_v(Isp::seconds(297.0), s1_ratio);
-
-    // Stage 2
-    let s2_prop = Mass::kg(111_500.0);
-    let s2_dry = Mass::kg(4_000.0);
-    let s2_ratio = (s2_prop + s2_dry) / s2_dry;
-    let s2_dv = delta_v(Isp::seconds(348.0), s2_ratio);
-
-    let total = s1_dv.as_mps() + s2_dv.as_mps();
-
-    // LEO requires ~9,400 m/s. With losses, F9 needs ~10,500 m/s ideal total.
-    // F9 achieves this comfortably.
-    assert!(total > 18000.0, "F9 total delta-v insufficient: {}", total);
+fn falcon_9_stacked_delta_v() {
+    let f9 = falcon_9();
+    let total = f9.total_delta_v().as_mps();
+    // Published estimates of F9's ideal delta-v to LEO cluster around 9.3 km/s.
+    assert!(
+        (total / 9_300.0 - 1.0).abs() < 0.05,
+        "F9 stacked ideal delta-v: {total:.0} m/s"
+    );
+    // The booster carries a heavy stack, so it delivers far less than its
+    // isolated ~8.7 km/s.
+    let s1 = f9.stage_delta_v(0).as_mps();
+    assert!((3_000.0..4_500.0).contains(&s1), "F9 S1 stacked: {s1:.0}");
 }
 
 /// TWR sanity check - F9 liftoff TWR
@@ -276,78 +277,208 @@ fn optimal_staging_equal_dv_theory() {
 }
 
 // ============================================================================
+// Real vehicles as tsi models them
+// ============================================================================
+
+/// Build a stage from published propellant and dry mass, with the engines'
+/// mass taken out of the dry mass to leave the structure.
+fn stage(engine: &str, count: u32, propellant_kg: f64, dry_kg: f64) -> Stage {
+    let engine = EngineDatabase::default().get(engine).unwrap().clone();
+    let structure = dry_kg - engine.dry_mass().as_kg() * count as f64;
+    Stage::new(engine, count, Mass::kg(propellant_kg), Mass::kg(structure))
+}
+
+/// Falcon 9 Block 5, expendable, with its 22.8 t LEO payload.
+fn falcon_9() -> Rocket {
+    Rocket::new(
+        vec![
+            stage("merlin-1d", 9, 411_000.0, 22_200.0),
+            stage("merlin-vacuum", 1, 111_500.0, 4_000.0),
+        ],
+        Mass::kg(22_800.0),
+    )
+}
+
+/// Saturn V (Apollo 11) with ~45 t of spacecraft to trans-lunar injection.
+///
+/// Source: NASA SP-4206 *Stages to Saturn*, appendix; Saturn V Flight Manual SA-503.
+fn saturn_v() -> Rocket {
+    Rocket::new(
+        vec![
+            stage("f-1", 5, 2_160_000.0, 131_000.0),
+            stage("j-2", 5, 443_000.0, 36_000.0),
+            stage("j-2", 1, 107_000.0, 13_500.0),
+        ],
+        Mass::kg(45_000.0),
+    )
+}
+
+/// Ask the optimizer to design a rocket that does the real vehicle's job,
+/// with the real vehicle's engines on each stage.
+fn redesign(real: &Rocket, structural_ratio: f64, min_twr: (f64, f64)) -> Rocket {
+    let (min_liftoff_twr, min_upper_twr) = min_twr;
+    let constraints = Constraints::new(
+        Ratio::new(min_liftoff_twr),
+        Ratio::new(min_upper_twr),
+        real.stage_count() as u32,
+        Ratio::new(structural_ratio),
+    );
+    let mut problem = Problem::new(real.payload(), real.total_delta_v(), vec![], constraints)
+        .with_stage_count(real.stage_count() as u32);
+    for (i, s) in real.stages().iter().enumerate() {
+        problem = problem.with_pinned_engine(i, s.engine().clone());
+    }
+    AnalyticalOptimizer.optimize(&problem).unwrap().rocket
+}
+
+// ============================================================================
 // Optimizer validation tests
 // ============================================================================
 
-/// Optimizer produces equal delta-v per stage (optimal staging theory)
+/// Given Falcon 9's engines, payload and delta-v, the optimizer designs
+/// something very like Falcon 9.
 ///
-/// For identical engines and structural ratios, the optimal solution
-/// splits delta-v equally between stages.
+/// F9's structural ratios are about 4.4% (S1) and 3.2% (S2); tsi uses one
+/// ratio for every stage, so 4% stands in for both.
+#[test]
+fn optimizer_reproduces_falcon_9() {
+    let real = falcon_9();
+    // tsi's default TWR limits (Falcon 9 lifts off at about 1.36)
+    let design = redesign(&real, 0.04, (1.2, 0.5));
+
+    // Same engine counts: nine Merlins on the booster, one MVac above.
+    assert_eq!(design.stages()[0].engine_count(), 9);
+    assert_eq!(design.stages()[1].engine_count(), 1);
+
+    // Liftoff mass within 5% of the real 571.5 t.
+    let ratio = design.total_mass().as_kg() / real.total_mass().as_kg();
+    assert!(
+        (ratio - 1.0).abs() < 0.05,
+        "optimized/real mass = {ratio:.3}"
+    );
+
+    // Stage split within 1 km/s of the real one. The optimizer leans further
+    // onto the vacuum stage than SpaceX did: ideal staging theory ignores
+    // gravity losses, which punish a long, low-thrust upper-stage burn.
+    for i in 0..2 {
+        let (d, r) = (
+            design.stage_delta_v(i).as_mps(),
+            real.stage_delta_v(i).as_mps(),
+        );
+        assert!(
+            (d - r).abs() < 1_000.0,
+            "stage {}: {d:.0} vs {r:.0} m/s",
+            i + 1
+        );
+    }
+}
+
+/// Saturn V shows where ideal staging theory stops being enough.
+///
+/// Asked to do Saturn V's job with its engines, the optimizer designs a
+/// rocket about 30% lighter, with the first stage cut back to the
+/// 2 km/s minimum. The J-2's 421 s beats the F-1's ~290 s so decisively that
+/// ideal theory puts as much delta-v as possible on the hydrogen stages.
+///
+/// Von Braun's team knew better. A low-thrust hydrogen stage lighting early
+/// spends minutes fighting gravity, which ideal delta-v doesn't count, and
+/// hydrogen tanks are bulky and heavy (the real S-IVB's structural ratio is
+/// 11%, against the S-IC's 4%). Capturing that needs gravity losses in the
+/// optimization, which the trajectory work planned after 1.0 will bring.
+#[test]
+fn optimizer_finds_saturn_v_heavier_than_ideal() {
+    let real = saturn_v();
+    // Saturn V lifted off at about 1.18; its upper stages lit at 0.8 and 0.6
+    let design = redesign(&real, 0.05, (1.15, 0.6));
+
+    let ratio = design.total_mass().as_kg() / real.total_mass().as_kg();
+    assert!(
+        (0.6..0.85).contains(&ratio),
+        "optimized/real mass = {ratio:.3}"
+    );
+    // The ideal design shrinks the kerosene first stage...
+    assert!(design.stage_delta_v(0).as_mps() < real.stage_delta_v(0).as_mps());
+    // ...but no further than the floor that keeps upper stages above the air.
+    assert!(design.stage_delta_v(0).as_mps() >= 2_000.0 - 1e-6);
+}
+
+/// The analytical optimizer's classical core: identical stages split
+/// delta-v equally when engine mass is negligible and there's no atmosphere.
 #[test]
 fn optimizer_equal_dv_split() {
-    let db = EngineDatabase::default();
-    let raptor = db.get("raptor-2").unwrap();
-
+    let feather = Engine::new(
+        "Feather",
+        Force::kilonewtons(2_000.0),
+        Force::kilonewtons(2_000.0),
+        Isp::seconds(350.0),
+        Isp::seconds(350.0),
+        Mass::kg(0.001),
+        Propellant::LoxCh4,
+    );
     let problem = Problem::new(
         Mass::kg(5_000.0),
         Velocity::mps(9_000.0),
-        vec![raptor.clone()],
-        Constraints::default(),
+        vec![feather],
+        Constraints::default()
+            .with_booster_isp(IspModel::Vacuum)
+            .with_max_engines(100),
     )
     .with_stage_count(2);
 
-    let optimizer = AnalyticalOptimizer;
-    let solution = optimizer.optimize(&problem).unwrap();
+    let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
     let rocket = &solution.rocket;
 
     let stage1_dv = rocket.stage_delta_v(0).as_mps();
     let stage2_dv = rocket.stage_delta_v(1).as_mps();
-
-    // Stages should have approximately equal delta-v
-    let ratio = stage1_dv / stage2_dv;
     assert!(
-        ratio > 0.95 && ratio < 1.05,
-        "Stage delta-v not equal: S1={:.0}, S2={:.0}",
-        stage1_dv,
-        stage2_dv
+        (stage1_dv - stage2_dv).abs() < 1.0,
+        "Stage delta-v not equal: S1={stage1_dv:.1}, S2={stage2_dv:.1}"
     );
 }
 
-/// Optimizer meets target delta-v with margin
+/// Real engines break the equal split: a booster from sea level has lower
+/// effective Isp, and fixed engine mass hurts small stages most.
 #[test]
-fn optimizer_meets_target_with_margin() {
+fn optimizer_shifts_delta_v_to_the_upper_stage() {
     let db = EngineDatabase::default();
     let raptor = db.get("raptor-2").unwrap();
 
-    let target = 9_400.0;
     let problem = Problem::new(
         Mass::kg(5_000.0),
-        Velocity::mps(target),
+        Velocity::mps(9_400.0),
         vec![raptor.clone()],
         Constraints::default(),
     )
     .with_stage_count(2);
 
-    let optimizer = AnalyticalOptimizer;
-    let solution = optimizer.optimize(&problem).unwrap();
+    let rocket = AnalyticalOptimizer.optimize(&problem).unwrap().rocket;
+    assert!(rocket.stage_delta_v(1).as_mps() > rocket.stage_delta_v(0).as_mps());
+}
 
-    let achieved = solution.rocket.total_delta_v().as_mps();
-    let margin = achieved - target;
+/// Optimizer meets the target exactly with no margin, and by the margin
+/// asked for when there is one.
+#[test]
+fn optimizer_margin_is_explicit() {
+    let db = EngineDatabase::default();
+    let raptor = db.get("raptor-2").unwrap();
+    let target = 9_400.0;
 
-    // Should exceed target (2% margin built in)
-    assert!(
-        achieved >= target,
-        "Optimizer failed to meet target: {:.0} < {:.0}",
-        achieved,
-        target
-    );
-    // Margin should be reasonable (1-5%)
-    let margin_percent = margin / target * 100.0;
-    assert!(
-        (1.0..=5.0).contains(&margin_percent),
-        "Margin outside expected range: {:.1}%",
-        margin_percent
-    );
+    for margin in [0.0, 0.02, 0.05] {
+        let problem = Problem::new(
+            Mass::kg(5_000.0),
+            Velocity::mps(target),
+            vec![raptor.clone()],
+            Constraints::default().with_margin(Ratio::new(margin)),
+        )
+        .with_stage_count(2);
+
+        let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
+        let achieved = solution.rocket.total_delta_v().as_mps();
+        assert!(
+            (achieved - target * (1.0 + margin)).abs() < 0.01,
+            "margin {margin}: achieved {achieved:.3} m/s"
+        );
+    }
 }
 
 /// Optimizer respects TWR constraints

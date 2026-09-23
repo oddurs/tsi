@@ -43,6 +43,7 @@ mod analytical;
 mod brute_force;
 mod monte_carlo;
 mod problem;
+mod sizing;
 mod solution;
 mod uncertainty;
 

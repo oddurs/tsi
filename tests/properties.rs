@@ -4,6 +4,13 @@
 //! catching edge cases that example-based tests might miss.
 
 use proptest::prelude::*;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use tsi::engine::{Engine, EngineDatabase};
+use tsi::optimizer::{
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer,
+    ParameterSampler, Problem, Solution, Uncertainty,
+};
 use tsi::physics::{delta_v, required_mass_ratio};
 use tsi::units::{Isp, Mass, Ratio, Velocity};
 
@@ -103,5 +110,167 @@ proptest! {
         // ratio * dry should approximately equal wet
         let recovered = ratio.as_f64() * dry;
         prop_assert!((recovered - wet).abs() / wet < 1e-10);
+    }
+}
+
+// ============================================================================
+// Optimizer invariants
+// ============================================================================
+
+/// Engines that can fly a first stage from sea level.
+const BOOSTER_ENGINES: [&str; 5] = ["raptor-2", "merlin-1d", "rs-25", "be-4", "rd-180"];
+
+fn engine(name: &str) -> Engine {
+    EngineDatabase::default().get(name).unwrap().clone()
+}
+
+fn problem(engine_name: &str, payload: f64, dv: f64, eps: f64, stages: u32) -> Problem {
+    let mut constraints = Constraints::default().with_max_engines(20);
+    constraints.structural_ratio = Ratio::new(eps);
+    Problem::new(
+        Mass::kg(payload),
+        Velocity::mps(dv),
+        vec![engine(engine_name)],
+        constraints,
+    )
+    .with_stage_count(stages)
+}
+
+/// Optimize, treating "no rocket can do this" as a reason to skip the case.
+fn solve(problem: &Problem) -> Option<Solution> {
+    match AnalyticalOptimizer.optimize(problem) {
+        Ok(solution) => Some(solution),
+        Err(OptimizeError::Infeasible { .. }) => None,
+        Err(e) => panic!("unexpected error: {e}"),
+    }
+}
+
+fn mass(solution: &Solution) -> f64 {
+    solution.rocket.total_mass().as_kg()
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    /// Every solution reaches its target and satisfies every TWR constraint.
+    #[test]
+    fn solutions_meet_target_and_twr(
+        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
+        payload in 500.0..50_000.0_f64,
+        dv in 6_000.0..11_000.0_f64,
+        eps in 0.04..0.12_f64,
+        stages in 2u32..=3,
+    ) {
+        let problem = problem(engine_name, payload, dv, eps, stages);
+        let Some(solution) = solve(&problem) else { return Ok(()) };
+        let rocket = &solution.rocket;
+        let c = &problem.constraints;
+
+        prop_assert!(solution.meets_target(), "margin {}", solution.margin);
+        prop_assert!(rocket.liftoff_twr().as_f64() >= c.min_liftoff_twr.as_f64() * (1.0 - 1e-9));
+        for i in 1..rocket.stage_count() {
+            prop_assert!(rocket.stage_twr(i).as_f64() >= c.min_stage_twr.as_f64() * (1.0 - 1e-9));
+        }
+        for stage in rocket.stages() {
+            prop_assert!(stage.engine_count() <= c.max_engines_per_stage);
+        }
+    }
+
+    /// A heavier payload never needs a lighter rocket.
+    #[test]
+    fn mass_rises_with_payload(
+        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
+        payload in 500.0..40_000.0_f64,
+        extra in 1.05..2.0_f64,
+        dv in 6_000.0..10_000.0_f64,
+    ) {
+        let light = problem(engine_name, payload, dv, 0.08, 2);
+        let heavy = problem(engine_name, payload * extra, dv, 0.08, 2);
+        let (Some(a), Some(b)) = (solve(&light), solve(&heavy)) else { return Ok(()) };
+        prop_assert!(mass(&b) >= mass(&a) * (1.0 - 1e-6), "{} then {}", mass(&a), mass(&b));
+    }
+
+    /// More delta-v always costs mass, so payload fraction strictly falls.
+    #[test]
+    fn payload_fraction_falls_as_delta_v_rises(
+        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
+        payload in 500.0..40_000.0_f64,
+        dv in 6_000.0..10_000.0_f64,
+        extra in 100.0..1_000.0_f64,
+    ) {
+        let easy = problem(engine_name, payload, dv, 0.08, 2);
+        let hard = problem(engine_name, payload, dv + extra, 0.08, 2);
+        let (Some(a), Some(b)) = (solve(&easy), solve(&hard)) else { return Ok(()) };
+        prop_assert!(mass(&b) > mass(&a));
+        prop_assert!(
+            b.rocket.payload_fraction().as_f64() < a.rocket.payload_fraction().as_f64()
+        );
+    }
+
+    /// A perturbed engine is never better at sea level than in vacuum: its
+    /// sea-level and vacuum values move together.
+    #[test]
+    fn perturbed_isp_sl_never_exceeds_vacuum(
+        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
+        isp_percent in 0.0..10.0_f64,
+        thrust_percent in 0.0..10.0_f64,
+        seed in any::<u64>(),
+    ) {
+        let sampler = ParameterSampler::new(Uncertainty {
+            isp_percent,
+            thrust_percent,
+            structural_percent: 0.0,
+        });
+        let mut rng = StdRng::seed_from_u64(seed);
+        let perturbed = sampler.perturb_engine_with_rng(&engine(engine_name), &mut rng);
+        prop_assert!(perturbed.isp_sl().as_seconds() <= perturbed.isp_vac().as_seconds());
+        prop_assert!(perturbed.thrust_sl().as_newtons() <= perturbed.thrust_vac().as_newtons());
+    }
+
+    /// Validation catches every non-finite or non-positive input, and
+    /// whatever gets past it produces a finite rocket or a clean error.
+    #[test]
+    fn arbitrary_inputs_never_panic_or_go_non_finite(
+        payload in prop::num::f64::ANY,
+        dv in prop::num::f64::ANY,
+    ) {
+        let problem = Problem::new(
+            Mass::kg(payload),
+            Velocity::mps(dv),
+            vec![engine("raptor-2")],
+            Constraints::default(),
+        )
+        .with_stage_count(2);
+        let sane = payload.is_finite() && payload > 0.0 && dv.is_finite() && dv > 0.0;
+        prop_assert_eq!(problem.is_valid().is_ok(), sane);
+        if let Ok(solution) = AnalyticalOptimizer.optimize(&problem) {
+            prop_assert!(mass(&solution).is_finite());
+            prop_assert!(solution.rocket.total_delta_v().as_mps().is_finite());
+        }
+    }
+}
+
+proptest! {
+    // Brute force takes tens of milliseconds per case, so fewer of them.
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    /// The analytical optimizer is never beaten by exhaustive search, and the
+    /// search gets close to it. They share the sizing model but none of the
+    /// search logic, so agreement is evidence that both are right.
+    #[test]
+    fn analytical_matches_brute_force(
+        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
+        payload in 1_000.0..30_000.0_f64,
+        dv in 7_000.0..10_000.0_f64,
+    ) {
+        let problem = problem(engine_name, payload, dv, 0.08, 2);
+        let Some(analytical) = solve(&problem) else { return Ok(()) };
+        let brute = BruteForceOptimizer::default()
+            .with_progress(false)
+            .optimize(&problem)
+            .expect("brute force should find what analytical found");
+        let (a, b) = (mass(&analytical), mass(&brute));
+        prop_assert!(a <= b * 1.01, "analytical {a:.0} kg, brute force {b:.0} kg");
+        prop_assert!(b <= a * 1.05, "brute force {b:.0} kg, analytical {a:.0} kg");
     }
 }

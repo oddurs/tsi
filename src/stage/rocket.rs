@@ -25,6 +25,11 @@
 //! must carry all stages above it plus the payload, which affects its
 //! effective mass ratio.
 //!
+//! The first stage burns through the atmosphere, so by default its Isp is
+//! averaged over the ascent ([`IspModel::AscentAveraged`]); every stage above
+//! it uses vacuum Isp. Use [`Rocket::with_booster_isp`] to change the first
+//! stage's model, for example to [`IspModel::Vacuum`] for a launch from the Moon.
+//!
 //! # Example
 //!
 //! ```
@@ -50,7 +55,7 @@
 //! println!("Payload fraction: {:.2}%", rocket.payload_fraction().as_f64() * 100.0);
 //! ```
 
-use crate::physics::{twr, G0};
+use crate::physics::{twr, IspModel, G0};
 use crate::units::{Mass, Ratio, Time, Velocity};
 
 use super::Stage;
@@ -83,6 +88,8 @@ pub struct Rocket {
     stages: Vec<Stage>,
     /// Payload mass carried to final orbit
     payload: Mass,
+    /// How the first stage's Isp is evaluated
+    booster_isp: IspModel,
 }
 
 impl Rocket {
@@ -98,7 +105,32 @@ impl Rocket {
     /// Panics if `stages` is empty.
     pub fn new(stages: Vec<Stage>, payload: Mass) -> Self {
         assert!(!stages.is_empty(), "Rocket must have at least one stage");
-        Self { stages, payload }
+        Self {
+            stages,
+            payload,
+            booster_isp: IspModel::AscentAveraged,
+        }
+    }
+
+    /// Set how the first stage's Isp is evaluated (default: ascent-averaged).
+    pub fn with_booster_isp(mut self, model: IspModel) -> Self {
+        self.booster_isp = model;
+        self
+    }
+
+    /// How the first stage's Isp is evaluated.
+    pub fn booster_isp(&self) -> IspModel {
+        self.booster_isp
+    }
+
+    /// The Isp model that applies to a given stage: the booster model for
+    /// stage 0, vacuum for everything above it.
+    pub fn isp_model(&self, stage_index: usize) -> IspModel {
+        if stage_index == 0 {
+            self.booster_isp
+        } else {
+            IspModel::Vacuum
+        }
     }
 
     /// Get the stages (bottom to top).
@@ -142,11 +174,12 @@ impl Rocket {
 
     /// Delta-v contribution from a specific stage.
     ///
-    /// Accounts for payload above this stage (upper stages + payload).
+    /// Accounts for payload above this stage (upper stages + payload), and
+    /// for the atmosphere the first stage flies through ([`Self::isp_model`]).
     pub fn stage_delta_v(&self, stage_index: usize) -> Velocity {
         let stage = &self.stages[stage_index];
         let payload_above = self.mass_above_stage(stage_index);
-        stage.delta_v_with_payload(payload_above)
+        stage.delta_v_with(payload_above, self.isp_model(stage_index))
     }
 
     /// Mass above a given stage (upper stages + payload).
@@ -194,9 +227,22 @@ impl Rocket {
     /// Must be > 1.0 for the rocket to leave the pad.
     /// Typical values: 1.2 - 1.5 for safety margin.
     pub fn liftoff_twr(&self) -> Ratio {
-        let first_stage = &self.stages[0];
-        let total_mass = self.total_mass();
-        twr(first_stage.thrust_sl(), total_mass, G0)
+        self.liftoff_twr_in(G0)
+    }
+
+    /// Liftoff TWR under a given surface gravity (m/s²).
+    ///
+    /// Uses sea-level thrust for an Earth launch (on the pad the engines push
+    /// against a full atmosphere) and vacuum thrust when the booster's
+    /// [`IspModel`] is vacuum. On Mars (3.72 m/s²) the same rocket has 2.6× the TWR.
+    pub fn liftoff_twr_in(&self, gravity: f64) -> Ratio {
+        let first = &self.stages[0];
+        let thrust = match self.booster_isp {
+            IspModel::AscentAveraged => first.thrust_sl(),
+            // No atmosphere to push against, so the pad sees vacuum thrust.
+            IspModel::Vacuum => first.thrust_vac(),
+        };
+        twr(thrust, self.total_mass(), gravity)
     }
 
     /// TWR at ignition of a specific stage (vacuum).
@@ -205,9 +251,14 @@ impl Rocket {
     ///
     /// * `stage_index` - Which stage (0 = first stage)
     pub fn stage_twr(&self, stage_index: usize) -> Ratio {
+        self.stage_twr_in(stage_index, G0)
+    }
+
+    /// Vacuum TWR at ignition of a stage, under a given gravity (m/s²).
+    pub fn stage_twr_in(&self, stage_index: usize, gravity: f64) -> Ratio {
         let stage = &self.stages[stage_index];
-        let payload_above = self.mass_above_stage(stage_index);
-        stage.twr_vac_with_payload(payload_above)
+        let total_mass = stage.wet_mass() + self.mass_above_stage(stage_index);
+        twr(stage.thrust_vac(), total_mass, gravity)
     }
 
     /// Check if all stage TWRs meet a minimum threshold.

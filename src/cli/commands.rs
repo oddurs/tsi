@@ -24,22 +24,22 @@ pub fn calculate(args: CalculateArgs) -> Result<()> {
     let mut errors = Vec::new();
 
     if let Some(isp) = args.isp {
-        if isp <= 0.0 {
-            errors.push("--isp must be positive".to_string());
+        if !positive(isp) {
+            errors.push("--isp must be a positive number".to_string());
         }
     }
     if let Some(ratio) = args.mass_ratio {
-        if ratio <= 1.0 {
+        if !(ratio.is_finite() && ratio > 1.0) {
             errors.push("--mass-ratio must be greater than 1.0 (wet > dry)".to_string());
         }
     }
     if let Some(wet) = args.wet_mass {
-        if wet <= 0.0 {
+        if !positive(wet) {
             errors.push("--wet-mass must be positive".to_string());
         }
     }
     if let Some(dry) = args.dry_mass {
-        if dry <= 0.0 {
+        if !positive(dry) {
             errors.push("--dry-mass must be positive".to_string());
         }
     }
@@ -49,16 +49,16 @@ pub fn calculate(args: CalculateArgs) -> Result<()> {
         }
     }
     if let Some(prop) = args.propellant_mass {
-        if prop <= 0.0 {
+        if !positive(prop) {
             errors.push("--propellant-mass must be positive".to_string());
         }
     }
     if let Some(thrust) = args.thrust {
-        if thrust <= 0.0 {
-            errors.push("--thrust must be positive".to_string());
+        if !positive(thrust) {
+            errors.push("--thrust must be a positive number".to_string());
         }
     }
-    if args.structural_ratio < 0.0 || args.structural_ratio >= 1.0 {
+    if !(args.structural_ratio >= 0.0 && args.structural_ratio < 1.0) {
         errors.push("--structural-ratio must be between 0 and 1".to_string());
     }
     if args.engine_count == 0 {
@@ -318,22 +318,28 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     // Validate inputs
     let mut errors = Vec::new();
 
-    if args.payload <= 0.0 {
-        errors.push("--payload must be positive".to_string());
+    if !positive(args.payload) {
+        errors.push("--payload must be a positive number".to_string());
     }
-    if args.target_dv <= 0.0 {
-        errors.push("--target-dv must be positive".to_string());
+    if !positive(args.target_dv) {
+        errors.push("--target-dv must be a positive number".to_string());
     }
-    if args.min_twr < 1.0 {
+    if !(args.min_twr.is_finite() && args.min_twr >= 1.0) {
         errors.push("--min-twr must be >= 1.0 for liftoff".to_string());
     }
-    if args.min_upper_twr <= 0.0 {
+    if !positive(args.min_upper_twr) {
         errors.push("--min-upper-twr must be positive".to_string());
     }
     if args.max_stages == 0 {
         errors.push("--max-stages must be at least 1".to_string());
     }
-    if args.structural_ratio <= 0.0 || args.structural_ratio >= 1.0 {
+    if args.stages == Some(0) {
+        errors.push("--stages must be at least 1".to_string());
+    }
+    if args.max_engines == 0 {
+        errors.push("--max-engines must be at least 1".to_string());
+    }
+    if !(args.structural_ratio > 0.0 && args.structural_ratio < 1.0) {
         errors.push("--structural-ratio must be between 0 and 1".to_string());
     }
 
@@ -392,68 +398,66 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         engines.push(lookup_engine(engine_name)?);
     }
 
-    // Add per-stage engines if specified
-    if let Some(ref s1_engine) = args.stage1_engine {
-        let engine = lookup_engine(s1_engine)?;
-        if !engines.iter().any(|e| e.name == engine.name) {
-            engines.push(engine);
-        }
-    }
-    if let Some(ref s2_engine) = args.stage2_engine {
-        let engine = lookup_engine(s2_engine)?;
-        if !engines.iter().any(|e| e.name == engine.name) {
-            engines.push(engine);
-        }
-    }
-
-    // Build constraints
+    // Build constraints. The launch body sets gravity and whether the first
+    // stage flies through an atmosphere.
+    let max_stages = args
+        .stages
+        .map_or(args.max_stages, |n| n.max(args.max_stages));
     let constraints = Constraints::new(
         Ratio::new(args.min_twr),
         Ratio::new(args.min_upper_twr),
-        args.max_stages,
+        max_stages,
         Ratio::new(args.structural_ratio),
-    );
+    )
+    .with_max_engines(args.max_engines)
+    .with_margin(Ratio::new(args.margin))
+    .with_surface_gravity(args.gravity.as_mps2())
+    .with_booster_isp(args.gravity.booster_isp());
 
     // Build problem
-    let problem = Problem::new(
+    let mut problem = Problem::new(
         Mass::kg(args.payload),
         Velocity::mps(args.target_dv),
-        engines.clone(),
+        engines,
         constraints,
-    )
-    .with_stage_count(args.max_stages);
+    );
+    if let Some(n) = args.stages {
+        problem = problem.with_stage_count(n);
+    }
+
+    // Pin per-stage engines
+    for (index, name) in [(0, &args.stage1_engine), (1, &args.stage2_engine)] {
+        if let Some(name) = name {
+            problem = problem.with_pinned_engine(index, lookup_engine(name)?);
+        }
+    }
+
+    if args.sea_level {
+        eprintln!(
+            "warning: --sea-level is deprecated and has no effect; \
+            liftoff TWR always uses sea-level thrust"
+        );
+    }
 
     // Select optimizer
     let show_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
-    let solution = match select_optimizer(&args, &problem) {
-        SelectedOptimizer::Analytical => {
-            let optimizer = AnalyticalOptimizer;
-            optimizer
-                .optimize(&problem)
-                .map_err(|e| anyhow::anyhow!("{}", e))?
-        }
-        SelectedOptimizer::BruteForce => {
-            let optimizer = BruteForceOptimizer::default().with_progress(show_progress);
-            optimizer
-                .optimize(&problem)
-                .map_err(|e| anyhow::anyhow!("{}", e))?
-        }
-    };
+    let solution = match select_optimizer(&args) {
+        SelectedOptimizer::Analytical => AnalyticalOptimizer.optimize(&problem),
+        SelectedOptimizer::BruteForce => BruteForceOptimizer::default()
+            .with_progress(show_progress)
+            .optimize(&problem),
+    }
+    .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    // Run Monte Carlo analysis if requested
-    let mc_results = if let Some(iterations) = args.monte_carlo {
-        let uncertainty = uncertainty_from_level(args.uncertainty);
-        let show_mc_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
-
-        let runner = MonteCarloRunner::new(uncertainty).with_progress(show_mc_progress);
-        Some(
-            runner
-                .run(&problem, iterations)
-                .map_err(|e| anyhow::anyhow!("{}", e))?,
-        )
-    } else {
-        None
-    };
+    // Stress the design with Monte Carlo analysis if requested
+    let mc_results = args.monte_carlo.map(|iterations| {
+        let mut runner = MonteCarloRunner::new(uncertainty_from_level(args.uncertainty))
+            .with_progress(show_progress);
+        if let Some(seed) = args.seed {
+            runner = runner.with_seed(seed);
+        }
+        runner.run_design(&solution, iterations)
+    });
 
     // Output results
     match args.output {
@@ -477,13 +481,27 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     Ok(())
 }
 
+/// A finite number greater than zero. NaN fails every comparison, so
+/// checking `x <= 0.0` alone would let it through.
+fn positive(x: f64) -> bool {
+    x.is_finite() && x > 0.0
+}
+
 /// Convert CLI uncertainty level to Uncertainty struct.
 fn uncertainty_from_level(level: UncertaintyLevel) -> Uncertainty {
     match level {
         UncertaintyLevel::None => Uncertainty::none(),
-        UncertaintyLevel::Low => Uncertainty::new(0.5, 3.0, 1.0),
+        UncertaintyLevel::Low => Uncertainty {
+            isp_percent: 0.5,
+            thrust_percent: 1.0,
+            structural_percent: 3.0,
+        },
         UncertaintyLevel::Default => Uncertainty::default(),
-        UncertaintyLevel::High => Uncertainty::new(2.0, 8.0, 3.0),
+        UncertaintyLevel::High => Uncertainty {
+            isp_percent: 2.0,
+            thrust_percent: 3.0,
+            structural_percent: 8.0,
+        },
     }
 }
 
@@ -493,34 +511,18 @@ enum SelectedOptimizer {
     BruteForce,
 }
 
-/// Select the appropriate optimizer based on user choice and problem complexity.
-fn select_optimizer(args: &OptimizeArgs, problem: &Problem) -> SelectedOptimizer {
+/// Select the optimizer. The analytical optimizer handles every problem the
+/// CLI can express, so it is the automatic choice; brute force is there as an
+/// independent cross-check.
+fn select_optimizer(args: &OptimizeArgs) -> SelectedOptimizer {
     match args.optimizer {
-        OptimizerChoice::Analytical => SelectedOptimizer::Analytical,
+        OptimizerChoice::Analytical | OptimizerChoice::Auto => SelectedOptimizer::Analytical,
         OptimizerChoice::BruteForce => SelectedOptimizer::BruteForce,
-        OptimizerChoice::Auto => {
-            // Auto-select based on problem complexity:
-            // - Single engine + 2 stages → Analytical (fast)
-            // - Multiple engines or != 2 stages → BruteForce
-            let is_simple = problem.is_single_engine() && problem.stage_count == Some(2);
-
-            if is_simple {
-                SelectedOptimizer::Analytical
-            } else {
-                SelectedOptimizer::BruteForce
-            }
-        }
     }
 }
 
 fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
-    terminal::print_solution_with_options(
-        args.target_dv,
-        args.payload,
-        solution,
-        args.gravity.as_mps2(),
-        args.sea_level,
-    );
+    terminal::print_solution_with_options(solution, args.gravity.as_mps2(), args.margin);
 }
 
 fn print_solution_json(
@@ -531,11 +533,12 @@ fn print_solution_json(
     let rocket = &solution.rocket;
     let stages = rocket.stages();
 
+    let gravity = args.gravity.as_mps2();
     let stages_json: Vec<_> = stages
         .iter()
         .enumerate()
         .map(|(i, stage)| {
-            serde_json::json!({
+            let mut json = serde_json::json!({
                 "stage": i + 1,
                 "engine": stage.engine().name,
                 "engine_count": stage.engine_count(),
@@ -543,9 +546,17 @@ fn print_solution_json(
                 "dry_mass_kg": stage.dry_mass().as_kg(),
                 "wet_mass_kg": stage.wet_mass().as_kg(),
                 "delta_v_mps": rocket.stage_delta_v(i).as_mps(),
+                "isp_s": stage.engine().isp_for(rocket.isp_model(i)).as_seconds(),
                 "burn_time_s": stage.burn_time().as_seconds(),
-                "twr": rocket.stage_twr(i).as_f64(),
-            })
+                // Vacuum thrust over the whole stack above and including
+                // this stage, at the moment it ignites
+                "twr_ignition": rocket.stage_twr_in(i, gravity).as_f64(),
+            });
+            if i == 0 {
+                // What gets the rocket off the pad
+                json["twr_liftoff"] = serde_json::json!(rocket.liftoff_twr_in(gravity).as_f64());
+            }
+            json
         })
         .collect();
 
@@ -557,6 +568,8 @@ fn print_solution_json(
         "payload_fraction": rocket.payload_fraction().as_f64(),
         "margin_mps": solution.margin.as_mps(),
         "margin_percent": solution.margin_percent(Velocity::mps(args.target_dv)),
+        "design_margin_percent": args.margin * 100.0,
+        "booster_isp_model": rocket.booster_isp().label(),
         "stages": stages_json,
         "metadata": {
             "optimizer": solution.optimizer_name,
@@ -622,7 +635,7 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if thrust_kn <= 0.0 {
+    if !positive(thrust_kn) {
         bail!("Thrust must be positive for custom engine '{}'", name);
     }
 
@@ -634,7 +647,7 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if isp_s <= 0.0 {
+    if !positive(isp_s) {
         bail!("ISP must be positive for custom engine '{}'", name);
     }
 
@@ -646,7 +659,7 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if mass_kg <= 0.0 {
+    if !positive(mass_kg) {
         bail!("Mass must be positive for custom engine '{}'", name);
     }
 
