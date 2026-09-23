@@ -10,12 +10,13 @@ Calculate performance for a stage with one Raptor-2 engine:
 
 ```bash
 $ tsi calculate --engine raptor-2 --propellant-mass 100000
-Engine:     Raptor-2
-Propellant: 100,000 kg (LOX/CH4)
-Dry mass:   11,600 kg
-Δv:         7,771 m/s
-Burn time:  2m 20s
-TWR (vac):  2.24
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           7,771 m/s   in vacuum, carrying nothing
+  Mass ratio   9.62        111,600 kg wet, 11,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.24        vacuum thrust over fully loaded weight
 ```
 
 ### Multiple Engines
@@ -24,12 +25,13 @@ Simulate a Falcon 9-like first stage with 9 Merlin engines:
 
 ```bash
 $ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 400000
-Engine:     Merlin-1D (×9)
-Propellant: 400,000 kg (LOX/RP-1)
-Dry mass:   44,230 kg
-Δv:         7,036 m/s
-Burn time:  2m 28s
-TWR (vac):  1.89
+tsi calculate  ·  Merlin-1D × 9, 400,000 kg propellant
+
+  Δv           7,036 m/s   in vacuum, carrying nothing
+  Mass ratio   10.04       444,230 kg wet, 44,230 kg dry
+  Isp          311 s       vacuum, LOX/RP-1
+  Burn time    2m 28s      at full vacuum thrust, 8,226 kN
+  TWR          1.89        vacuum thrust over fully loaded weight
 ```
 
 ### Manual Parameters
@@ -38,8 +40,11 @@ When you want to explore hypothetical configurations:
 
 ```bash
 $ tsi calculate --isp 380 --mass-ratio 10
-Δv:         8,581 m/s
-Mass ratio: 10.000
+tsi calculate  ·  Isp 380 s, mass ratio 10.00
+
+  Δv           8,581 m/s   in vacuum, carrying nothing
+  Mass ratio   10.00       wet mass over dry mass
+  Isp          380 s       vacuum
 ```
 
 ### Quick Calculations
@@ -57,11 +62,12 @@ $ tsi calculate --engine raptor-2 --propellant-mass 100000 -o compact
 
 ```bash
 $ tsi engines --propellant methane
-NAME             PROPELLANT    THRUST(vac)   ISP(vac)       MASS
---------------------------------------------------------------
-Raptor-2         LOX/CH4           2,450 kN      350s      1,600 kg
-Raptor-Vacuum    LOX/CH4           2,550 kN      380s      1,600 kg
-BE-4             LOX/CH4           2,600 kN      340s      2,000 kg
+tsi engines  ·  3 engines matching
+
+  Engine         Propellant  Thrust vac  Isp vac      Mass
+  Raptor-2       LOX/CH4       2,450 kN    350 s  1,600 kg
+  Raptor-Vacuum  LOX/CH4       2,550 kN    380 s  1,600 kg
+  BE-4           LOX/CH4       2,600 kN    340 s  2,000 kg
 ```
 
 ### High-Isp Engines
@@ -70,11 +76,12 @@ Filter for hydrogen engines (highest Isp):
 
 ```bash
 $ tsi engines --propellant hydrogen
-NAME             PROPELLANT    THRUST(vac)   ISP(vac)       MASS
---------------------------------------------------------------
-RS-25            LOX/LH2           2,279 kN      452s      3,527 kg
-RL-10C           LOX/LH2             106 kN      453s        190 kg
-J-2              LOX/LH2           1,033 kN      421s      1,788 kg
+tsi engines  ·  3 engines matching
+
+  Engine  Propellant  Thrust vac  Isp vac      Mass
+  RS-25   LOX/LH2       2,279 kN    452 s  3,527 kg
+  RL-10C  LOX/LH2         106 kN    453 s    190 kg
+  J-2     LOX/LH2       1,033 kN    421 s  1,788 kg
 ```
 
 ### Detailed Comparison
@@ -83,10 +90,15 @@ Use verbose output to see sea-level performance:
 
 ```bash
 $ tsi engines --name raptor --verbose
-NAME             PROPELLANT   THRUST(vac) THRUST(sl) ISP(vac)  ISP(sl)       MASS
-------------------------------------------------------------------------------------
-Raptor-2         LOX/CH4         2,450 kN   2,256 kN     350s     327s      1,600 kg
-Raptor-Vacuum    LOX/CH4         2,550 kN          -     380s        -      1,600 kg
+tsi engines  ·  2 engines matching
+
+  Engine         Propellant  Thrust vac  Isp vac  Thrust SL  Isp SL      Mass  T/W
+  Raptor-2       LOX/CH4       2,450 kN    350 s   2,256 kN   327 s  1,600 kg  156
+  Raptor-Vacuum  LOX/CH4       2,550 kN    380 s          —       —  1,600 kg  163
+
+  · — : no sea-level rating; a vacuum engine, for upper stages only
+
+  · T/W: vacuum thrust over the engine's own weight
 ```
 
 ## Staging Optimization
@@ -97,43 +109,26 @@ Optimize a two-stage rocket to reach Low Earth Orbit (9,400 m/s):
 
 ```bash
 $ tsi optimize --payload 5000 --target-dv 9400 --engine raptor-2
-═══════════════════════════════════════════════════════════════
-  tsi — Staging Optimization Complete
-═══════════════════════════════════════════════════════════════
+tsi optimize  ·  5,000 kg to 9,400 m/s
 
-  Target Δv:  9,400 m/s    Payload:  5,000 kg
-  Solution:   2-stage    Total mass:  186,599 kg
+  Liftoff   186,599 kg   2 stages, 3m 51s of burning
+  Payload   5,000 kg     2.68% of the liftoff mass
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 2 (upper)                                            │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 28,819 kg (LOX/CH4)                            │
-  │  Dry mass:   3,906 kg                                       │
-  │  Δv:         4,955 m/s                                      │
-  │  Burn time:  40.4s                                          │
-  │  TWR:        6.62 at ignition                               │
-  └─────────────────────────────────────────────────────────────┘
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STAGE 1 (booster)                                          │
-  │  Engine:     Raptor-2 (×1)                                  │
-  │  Propellant: 136,365 kg (LOX/CH4)                           │
-  │  Dry mass:   12,509 kg                                      │
-  │  Δv:         4,445 m/s                                      │
-  │  Burn time:  3m 11s                                         │
-  │  TWR:        1.23 at liftoff                                │
-  └─────────────────────────────────────────────────────────────┘
+  Stage      Engines       Propellant   Dry mass    Isp         Δv  TWR
+  1 booster  1 × Raptor-2  136,365 kg  12,509 kg  345 s  4,445 m/s  1.23 liftoff
+  2 upper    1 × Raptor-2   28,819 kg   3,906 kg  350 s  4,955 m/s  6.62 ignition
+  ───────────────────────────────────────────────────────────────────────────────
+  total                    165,184 kg  16,415 kg         9,400 m/s
 
-  Total propellant:  165,184 kg
-  Total dry mass:    16,415 kg
-  Total burn time:   231s
+  Δv     ███████████████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   9,400 m/s
+         █ stage 1 47%   ▓ stage 2 53%
 
-  Payload fraction:  2.68%
-  Delta-v margin:    -0 m/s (-0.0%)
-  Booster Isp:       345s (ascent-averaged); upper stages use vacuum Isp
+  Mass   ██████████████████████████████████████▓▓▓▓▓▓▓▓▓▒   186,599 kg
+         █ stage 1 80%   ▓ stage 2 18%   ▒ payload 3%
 
-  Optimizer: Analytical (181 configs)
-
-═══════════════════════════════════════════════════════════════
+  Margin        0 m/s        hits the target exactly; --margin adds headroom
+  Booster Isp   345 s        stage 1, averaged over the climb (350 s in vacuum)
+  Optimizer     Analytical   181 configurations evaluated
 ```
 
 Textbook staging theory says identical stages should split delta-v equally.
@@ -218,36 +213,39 @@ two stages give about 9,400 m/s (`cargo run --example falcon9`).
 
 ```bash
 $ tsi calculate --engine merlin-1d --engine-count 9 --propellant-mass 411000 --structural-ratio 0.044
-Engine:     Merlin-1D (×9)
-Propellant: 411,000 kg (LOX/RP-1)
-Dry mass:   22,314 kg
-Δv:         9,047 m/s
-Burn time:  2m 32s
-TWR (vac):  1.94
+tsi calculate  ·  Merlin-1D × 9, 411,000 kg propellant
+
+  Δv           9,047 m/s   in vacuum, carrying nothing
+  Mass ratio   19.42       433,314 kg wet, 22,314 kg dry
+  Isp          311 s       vacuum, LOX/RP-1
+  Burn time    2m 32s      at full vacuum thrust, 8,226 kN
+  TWR          1.94        vacuum thrust over fully loaded weight
 ```
 
 ### Falcon 9 Second Stage
 
 ```bash
 $ tsi calculate --engine merlin-vacuum --propellant-mass 111500 --structural-ratio 0.032
-Engine:     Merlin-Vacuum
-Propellant: 111,500 kg (LOX/RP-1)
-Dry mass:   4,038 kg
-Δv:         11,446 m/s
-Burn time:  6m 28s
-TWR (vac):  0.87
+tsi calculate  ·  Merlin-Vacuum, 111,500 kg propellant
+
+  Δv           11,446 m/s   in vacuum, carrying nothing
+  Mass ratio   28.61        115,538 kg wet, 4,038 kg dry
+  Isp          348 s        vacuum, LOX/RP-1
+  Burn time    6m 28s       at full vacuum thrust, 981 kN
+  TWR          0.87         vacuum thrust over fully loaded weight
 ```
 
 ### Saturn V S-IC (First Stage)
 
 ```bash
 $ tsi calculate --engine f-1 --engine-count 5 --propellant-mass 2160000 --structural-ratio 0.041
-Engine:     F-1 (×5)
-Propellant: 2,160,000 kg (LOX/RP-1)
-Dry mass:   130,560 kg
-Δv:         8,540 m/s
-Burn time:  2m 46s
-TWR (vac):  1.73
+tsi calculate  ·  F-1 × 5, 2,160,000 kg propellant
+
+  Δv           8,540 m/s   in vacuum, carrying nothing
+  Mass ratio   17.54       2,290,560 kg wet, 130,560 kg dry
+  Isp          304 s       vacuum, LOX/RP-1
+  Burn time    2m 46s      at full vacuum thrust, 38,850 kN
+  TWR          1.73        vacuum thrust over fully loaded weight
 ```
 
 ## Scripting Examples
@@ -319,10 +317,22 @@ Lower structural ratios dramatically improve delta-v:
 
 ```bash
 $ tsi calculate --engine raptor-2 --propellant-mass 100000 --structural-ratio 0.05
-Δv:         9,549 m/s
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           9,549 m/s   in vacuum, carrying nothing
+  Mass ratio   16.15       106,600 kg wet, 6,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.34        vacuum thrust over fully loaded weight
 
 $ tsi calculate --engine raptor-2 --propellant-mass 100000 --structural-ratio 0.15
-Δv:         6,691 m/s
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           6,691 m/s   in vacuum, carrying nothing
+  Mass ratio   7.02        116,600 kg wet, 16,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.14        vacuum thrust over fully loaded weight
 ```
 
 Going from 5% to 15% structure costs almost 2,900 m/s: a third of the way to orbit.

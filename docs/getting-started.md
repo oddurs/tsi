@@ -56,12 +56,13 @@ tsi engines --propellant methane
 
 ```
 $ tsi calculate --engine raptor-2 --propellant-mass 100000
-Engine:     Raptor-2
-Propellant: 100,000 kg (LOX/CH4)
-Dry mass:   11,600 kg
-Δv:         7,771 m/s
-Burn time:  2m 20s
-TWR (vac):  2.24
+tsi calculate  ·  Raptor-2, 100,000 kg propellant
+
+  Δv           7,771 m/s   in vacuum, carrying nothing
+  Mass ratio   9.62        111,600 kg wet, 11,600 kg dry
+  Isp          350 s       vacuum, LOX/CH4
+  Burn time    2m 20s      at full vacuum thrust, 2,450 kN
+  TWR          2.24        vacuum thrust over fully loaded weight
 ```
 
 ### Design a rocket

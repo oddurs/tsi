@@ -4,6 +4,7 @@ expression: stable(json)
 ---
 {
   "booster_isp_model": "ascent-averaged",
+  "command": "optimize",
   "design_margin_percent": 0.0,
   "margin_mps": 0.0,
   "margin_percent": 0.0,

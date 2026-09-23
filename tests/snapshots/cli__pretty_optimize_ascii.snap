@@ -1,0 +1,40 @@
+---
+source: tests/cli.rs
+expression: text
+---
+
+tsi optimize  -  5,000 kg to 9,400 m/s
+
+  Liftoff   186,599 kg   2 stages, 3m 51s of burning
+  Payload   5,000 kg     2.68% of the liftoff mass
+
+  Stage      Engines       Propellant   Dry mass    Isp         dv  TWR
+  1 booster  1 x Raptor-2  136,365 kg  12,509 kg  345 s  4,445 m/s  1.23 liftoff
+  2 upper    1 x Raptor-2   28,819 kg   3,906 kg  350 s  4,955 m/s  6.62 ignition
+  -------------------------------------------------------------------------------
+  total                    165,184 kg  16,415 kg         9,400 m/s
+
+  dv     #######################=========================   9,400 m/s
+         # stage 1 47%   = stage 2 53%
+
+  Mass   ######################################=========+   186,599 kg
+         # stage 1 80%   = stage 2 18%   + payload 3%
+
+  Margin        0 m/s        hits the target exactly; --margin adds headroom
+  Booster Isp   345 s        stage 1, averaged over the climb (350 s in vacuum)
+  Optimizer     Analytical   [n] configurations evaluated
+
+  The rocket
+
+     /\      payload    5,000 kg
+    /  \
+   +----+
+   |    |
+   | S2 |    stage 2    1 x Raptor-2    28.8 t propellant   4,955 m/s
+   +----+
+   |    |
+   |    |
+   | S1 |    stage 1    1 x Raptor-2   136.4 t propellant   4,445 m/s
+   |    |
+   |    |
+   +-++-+

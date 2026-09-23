@@ -1,0 +1,12 @@
+---
+source: tests/cli.rs
+expression: "pretty(&[\"calculate\", \"--engine\", \"merlin-1d\", \"--engine-count\", \"9\",\n\"--propellant-mass\", \"411000\", \"--structural-ratio\", \"0.044\"])"
+---
+
+tsi calculate  ·  Merlin-1D × 9, 411,000 kg propellant
+
+  Δv           9,047 m/s   in vacuum, carrying nothing
+  Mass ratio   19.42       433,314 kg wet, 22,314 kg dry
+  Isp          311 s       vacuum, LOX/RP-1
+  Burn time    2m 32s      at full vacuum thrust, 8,226 kN
+  TWR          1.94        vacuum thrust over fully loaded weight

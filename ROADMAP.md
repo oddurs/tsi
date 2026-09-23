@@ -87,7 +87,7 @@ The vehicle is assembled: a library that can be depended on.
 
 ## v0.9 — Wet dress
 
-`··········` 0% · 0 of 11 done · due 2026-11-17
+`##········` 17% · 2 of 12 done · due 2026-11-17
 
 Full rehearsal, fuelled: the features that give tsi its character.
 
@@ -99,7 +99,6 @@ Full rehearsal, fuelled: the features that give tsi its character.
 - [ ] [`0038`](https://github.com/oddurs/tsi/blob/main/cairn/items/0038-unit-aware-inputs-5t-9-4km-s-2450kn.md) Unit-aware inputs: 5t, 9.4km/s, 2450kN <sup>feature · p1 · m · units</sup>
 - [ ] [`0039`](https://github.com/oddurs/tsi/blob/main/cairn/items/0039-engine-database-v2-citations-solids-hypergolics-more-engines.md) Engine database v2: citations, solids, hypergolics, more engines <sup>feature · p1 · l · data</sup>
 - [ ] [`0040`](https://github.com/oddurs/tsi/blob/main/cairn/items/0040-engines-file-load-a-user-engine-database.md) --engines-file: load a user engine database <sup>feature · p2 · s · engine</sup>
-- [ ] [`0041`](https://github.com/oddurs/tsi/blob/main/cairn/items/0041-colour-output-that-respects-no-color-and-tty-detection.md) Colour output that respects NO_COLOR and tty detection <sup>feature · p2 · s · output</sup>
 - [ ] [`0042`](https://github.com/oddurs/tsi/blob/main/cairn/items/0042-tsi-sweep-trade-studies-as-a-table-or-csv.md) tsi sweep: trade studies as a table or CSV <sup>feature · p2 · m · cli</sup>
 - [ ] [`0043`](https://github.com/oddurs/tsi/blob/main/cairn/items/0043-docs-physics-md-becomes-a-guided-tour-why-rockets-stage.md) docs/physics.md becomes a guided tour: why rockets stage <sup>docs · p1 · m · docs</sup>
 - [ ] [`0044`](https://github.com/oddurs/tsi/blob/main/cairn/items/0044-a-little-tsiolkovsky-in-the-terminal.md) A little Tsiolkovsky in the terminal <sup>feature · p3 · s · cli</sup>
@@ -107,6 +106,11 @@ Full rehearsal, fuelled: the features that give tsi its character.
 ### in progress
 
 - [ ] [`0060`](https://github.com/oddurs/tsi/blob/main/cairn/items/0060-agentic-pr-workflow-ship-script-hooks-auto-merge.md) Agentic PR workflow: ship script, hooks, auto-merge <sup>chore · p1 · s · infra</sup>
+
+### done
+
+- [x] [`0041`](https://github.com/oddurs/tsi/blob/main/cairn/items/0041-colour-output-that-respects-no-color-and-tty-detection.md) Colour output that respects NO_COLOR and tty detection <sup>feature · p2 · s · output</sup>
+- [x] [`0059`](https://github.com/oddurs/tsi/blob/main/cairn/items/0059-cli-output-system-structured-data-documents-charts-and-diagrams.md) CLI output system: structured data, documents, charts and diagrams <sup>feature · p1 · l · output</sup>
 
 ## v1.0 — Liftoff
 

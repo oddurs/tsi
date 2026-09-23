@@ -18,7 +18,15 @@ required-features = ["cli"]
 default = ["cli"]
 # The `tsi` command-line tool. Library users can turn it off:
 #   tsiolkovsky = { version = "0.8", default-features = false }
-cli = ["dep:clap", "dep:clap_complete", "dep:clap_mangen", "dep:anyhow", "dep:serde_json"]
+cli = [
+    "dep:clap",
+    "dep:clap_complete",
+    "dep:clap_mangen",
+    "dep:anyhow",
+    "dep:serde_json",
+    "dep:anstream",
+    "dep:anstyle",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"], optional = true }
@@ -28,6 +36,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 serde_json = { version = "1", optional = true }
 anyhow = { version = "1", optional = true }
+anstream = { version = "0.6", optional = true }
+anstyle = { version = "1", optional = true }
 thiserror = "2"
 rand = "0.8"
 rand_distr = "0.4"

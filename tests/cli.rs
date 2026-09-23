@@ -51,7 +51,7 @@ fn calculate_with_isp_and_mass_ratio() {
         .args(["calculate", "--isp", "311", "--mass-ratio", "3.5"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Δv:"))
+        .stdout(predicate::str::contains("Δv "))
         .stdout(predicate::str::contains("m/s"));
 }
 
@@ -68,7 +68,7 @@ fn calculate_with_engine() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Raptor-2"))
-        .stdout(predicate::str::contains("Δv:"))
+        .stdout(predicate::str::contains("Δv "))
         .stdout(predicate::str::contains("LOX/CH4"));
 }
 
@@ -86,8 +86,8 @@ fn calculate_with_multiple_engines() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Merlin-1D (×9)"))
-        .stdout(predicate::str::contains("Δv:"));
+        .stdout(predicate::str::contains("Merlin-1D × 9"))
+        .stdout(predicate::str::contains("Δv "));
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn calculate_with_wet_dry_mass() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Δv:"));
+        .stdout(predicate::str::contains("Δv "));
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn engines_json_output() {
         .args(["engines", "--output", "json"])
         .assert()
         .success()
-        .stdout(predicate::str::starts_with("["));
+        .stdout(predicate::str::contains("\"command\": \"engines\""));
 }
 
 #[test]
@@ -203,8 +203,8 @@ fn engines_json_is_valid() {
 
     assert!(output.status.success());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(json.is_array());
-    assert!(json.as_array().unwrap().len() >= 10);
+    assert_eq!(json["schema_version"], 1);
+    assert!(json["engines"].as_array().unwrap().len() >= 10);
 }
 
 #[test]
@@ -213,11 +213,11 @@ fn engines_table_has_headers() {
         .args(["engines"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("NAME"))
-        .stdout(predicate::str::contains("PROPELLANT"))
-        .stdout(predicate::str::contains("THRUST"))
-        .stdout(predicate::str::contains("ISP"))
-        .stdout(predicate::str::contains("MASS"));
+        .stdout(predicate::str::contains("Engine"))
+        .stdout(predicate::str::contains("Propellant"))
+        .stdout(predicate::str::contains("Thrust vac"))
+        .stdout(predicate::str::contains("Isp vac"))
+        .stdout(predicate::str::contains("Mass"));
 }
 
 // ============================================================================
@@ -337,8 +337,8 @@ fn engines_verbose_shows_sl_values() {
         .args(["engines", "--verbose"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("THRUST(sl)"))
-        .stdout(predicate::str::contains("ISP(sl)"));
+        .stdout(predicate::str::contains("Thrust SL"))
+        .stdout(predicate::str::contains("Isp SL"));
 }
 
 // ============================================================================
@@ -359,10 +359,10 @@ fn optimize_basic() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Staging Optimization Complete"))
-        .stdout(predicate::str::contains("STAGE 1"))
-        .stdout(predicate::str::contains("STAGE 2"))
-        .stdout(predicate::str::contains("Payload fraction"));
+        .stdout(predicate::str::contains("tsi optimize"))
+        .stdout(predicate::str::contains("1 booster"))
+        .stdout(predicate::str::contains("2 upper"))
+        .stdout(predicate::str::contains("of the liftoff mass"));
 }
 
 #[test]
@@ -452,7 +452,7 @@ fn optimize_with_custom_twr() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("STAGE 1"));
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 #[test]
@@ -509,7 +509,7 @@ fn optimize_with_analytical_flag() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("STAGE 1"));
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 #[test]
@@ -528,7 +528,7 @@ fn optimize_with_brute_force_flag() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("STAGE 1"));
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn optimize_multi_engine_comma_separated() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Staging Optimization Complete"));
+        .stdout(predicate::str::contains("tsi optimize"));
 }
 
 #[test]
@@ -589,7 +589,7 @@ fn optimize_quiet_flag() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("STAGE 1"));
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 #[test]
@@ -611,7 +611,7 @@ fn optimize_per_stage_engines() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("STAGE 1"));
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 // ============================================================================
@@ -635,8 +635,8 @@ fn optimize_monte_carlo_basic() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"))
-        .stdout(predicate::str::contains("Success probability"));
+        .stdout(predicate::str::contains("Monte Carlo"))
+        .stdout(predicate::str::contains("Success"));
 }
 
 #[test]
@@ -658,7 +658,7 @@ fn optimize_monte_carlo_with_uncertainty_level() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("MONTE CARLO ANALYSIS"));
+        .stdout(predicate::str::contains("Monte Carlo"));
 }
 
 #[test]
@@ -704,9 +704,9 @@ fn optimize_monte_carlo_shows_confidence_intervals() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Confidence Intervals"))
-        .stdout(predicate::str::contains("5th %ile"))
-        .stdout(predicate::str::contains("95th %ile"));
+        .stdout(predicate::str::contains("5th to 95th percentile"))
+        .stdout(predicate::str::contains("5th to 95th"))
+        .stdout(predicate::str::contains("median"));
 }
 
 #[test]
@@ -753,8 +753,8 @@ fn optimize_diagram_shows_ascii_rocket() {
         .stdout(predicate::str::contains("Payload"))
         .stdout(predicate::str::contains("S1"))
         .stdout(predicate::str::contains("S2"))
-        .stdout(predicate::str::contains("/\\")) // Nose cone
-        .stdout(predicate::str::contains("\\/")); // Nozzles
+        .stdout(predicate::str::contains("╱╲")) // Nose cone
+        .stdout(predicate::str::contains("└┬──┬┘")); // Nozzles
 }
 
 // ============================================================================
@@ -776,11 +776,11 @@ fn optimize_show_losses() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("ESTIMATED LOSSES"))
-        .stdout(predicate::str::contains("Gravity losses"))
-        .stdout(predicate::str::contains("Drag losses"))
-        .stdout(predicate::str::contains("Steering losses"))
-        .stdout(predicate::str::contains("LEO orbital v"));
+        .stdout(predicate::str::contains("Losses on the way"))
+        .stdout(predicate::str::contains("Gravity"))
+        .stdout(predicate::str::contains("Drag"))
+        .stdout(predicate::str::contains("Steering"))
+        .stdout(predicate::str::contains("orbital velocity"));
 }
 
 // ============================================================================
@@ -803,8 +803,8 @@ fn optimize_custom_engine() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("TestEngine"))
-        .stdout(predicate::str::contains("LOX/CH4"));
+        .stdout(predicate::str::contains("× TestEngine"))
+        .stdout(predicate::str::contains("1 booster"));
 }
 
 #[test]
@@ -1097,8 +1097,8 @@ fn pretty_output_labels_twr() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("at liftoff"))
-        .stdout(predicate::str::contains("at ignition"));
+        .stdout(predicate::str::contains("liftoff"))
+        .stdout(predicate::str::contains("ignition"));
 }
 
 #[test]
@@ -1546,4 +1546,139 @@ fn custom_engine_with_blank_name_is_rejected_by_the_library() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("engine name is empty"));
+}
+
+// ============================================================================
+// Pretty output snapshots
+//
+// The layout of every command, pinned. Output to a pipe has no colour, so
+// these are plain text. The optimizer's iteration count is redacted: it can
+// differ in the last floating-point digit between platforms.
+// ============================================================================
+
+fn pretty(args: &[&str]) -> String {
+    let output = tsi().args(args).output().expect("failed to run");
+    assert!(
+        output.status.success(),
+        "tsi failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    text.lines()
+        .map(|line| match line.find(" configurations evaluated") {
+            Some(end) => {
+                let start = line[..end].rfind(' ').map_or(0, |i| i + 1);
+                format!("{}[n]{}", &line[..start], &line[end..])
+            }
+            None => line.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn snapshot_pretty_calculate() {
+    insta::assert_snapshot!(
+        "pretty_calculate",
+        pretty(&[
+            "calculate",
+            "--engine",
+            "merlin-1d",
+            "--engine-count",
+            "9",
+            "--propellant-mass",
+            "411000",
+            "--structural-ratio",
+            "0.044"
+        ])
+    );
+}
+
+#[test]
+fn snapshot_pretty_engines() {
+    insta::assert_snapshot!("pretty_engines_verbose", pretty(&["engines", "--verbose"]));
+}
+
+#[test]
+fn snapshot_pretty_optimize_everything() {
+    insta::assert_snapshot!(
+        "pretty_optimize_everything",
+        pretty(&[
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "merlin-1d,rl-10c",
+            "--max-stages",
+            "3",
+            "--diagram",
+            "--show-losses",
+            "--monte-carlo",
+            "2000",
+            "--seed",
+            "7",
+            "--quiet",
+        ])
+    );
+}
+
+#[test]
+fn snapshot_pretty_optimize_ascii() {
+    let text = pretty(&[
+        "--ascii",
+        "optimize",
+        "--payload",
+        "5000",
+        "--target-dv",
+        "9400",
+        "--engine",
+        "raptor-2",
+        "--diagram",
+        "--quiet",
+    ]);
+    assert!(text.is_ascii(), "--ascii output must be plain ASCII");
+    insta::assert_snapshot!("pretty_optimize_ascii", text);
+}
+
+#[test]
+fn json_calculate_has_envelope() {
+    let output = tsi()
+        .args([
+            "calculate",
+            "--engine",
+            "raptor-2",
+            "--propellant-mass",
+            "100000",
+            "-o",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["command"], "calculate");
+    assert_eq!(json["engine"], "Raptor-2");
+    assert!((json["delta_v_mps"].as_f64().unwrap() - 7_771.0).abs() < 1.0);
+}
+
+#[test]
+fn color_is_off_in_pipes_and_on_when_forced() {
+    let piped = tsi().args(["engines"]).output().unwrap();
+    assert!(!piped.stdout.contains(&0x1b), "no escapes into a pipe");
+    let forced = tsi()
+        .args(["--color", "always", "engines"])
+        .output()
+        .unwrap();
+    assert!(
+        forced.stdout.contains(&0x1b),
+        "--color always forces escapes"
+    );
+    let no_color = tsi()
+        .env("NO_COLOR", "1")
+        .args(["engines"])
+        .output()
+        .unwrap();
+    assert!(!no_color.stdout.contains(&0x1b));
 }

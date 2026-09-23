@@ -1,311 +1,231 @@
-//! ASCII rocket diagram generation.
-//!
-//! Generates visual representations of rocket configurations using
-//! ASCII art. Stage heights are scaled proportionally to propellant mass.
-//!
-//! # Example Output
+//! A side view of a rocket.
 //!
 //! ```text
-//!        /\
-//!       /  \
-//!      /    \       ← Payload (5,000 kg)
-//!     /______\
-//!     |      |
-//!     | S2   |      ← Stage 2: Raptor-2 ×1
-//!     |      |         100,000 kg propellant
-//!     |______|
-//!     |      |
-//!     |      |
-//!     | S1   |      ← Stage 1: Raptor-2 ×3
-//!     |      |         400,000 kg propellant
-//!     |      |
-//!     |______|
-//!      \    /
-//!       \  /
-//!        \/
+//!      ╱╲      payload    5,000 kg
+//!     ╱  ╲
+//!    ┌────┐
+//!    │ S2 │    stage 2    1 × Raptor-2     28.8 t propellant   4,955 m/s
+//!    ├────┤
+//!    │    │
+//!    │ S1 │    stage 1    1 × Raptor-2    136.4 t propellant   4,445 m/s
+//!    │    │
+//!    └┬──┬┘
 //! ```
+//!
+//! Each stage's height follows the square root of its fully loaded mass, so
+//! a small upper stage is still visible above a large booster, and larger
+//! stages look larger without the drawing running off the screen.
 
 use tsiolkovsky::stage::Rocket;
+use tsiolkovsky::units::format_thousands_f64;
 
-/// Width of the rocket body in characters (interior).
-const ROCKET_WIDTH: usize = 12;
+use super::doc::{Block, Text, Tone};
 
-/// Minimum height for any stage (in lines).
-const MIN_STAGE_HEIGHT: usize = 3;
+/// Tallest a stage is drawn, in rows.
+const MAX_ROWS: f64 = 5.0;
 
-/// Maximum height for the largest stage (in lines).
-const MAX_STAGE_HEIGHT: usize = 10;
+/// Width of the drawing column, before the labels.
+const ART_WIDTH: usize = 10;
 
-/// Generate an ASCII diagram of the rocket.
-///
-/// The diagram shows:
-/// - Payload as a nose cone at the top
-/// - Each stage as a box, height proportional to propellant mass
-/// - Stage numbers and engine names as labels
-/// - A nozzle/fins section at the bottom
-///
-/// # Arguments
-///
-/// * `rocket` - The rocket configuration to visualize
-/// * `payload_kg` - Payload mass in kg (for label)
-///
-/// # Returns
-///
-/// A vector of strings, each representing one line of the diagram.
-pub fn generate_rocket_diagram(rocket: &Rocket, payload_kg: f64) -> Vec<String> {
-    let mut lines = Vec::new();
+struct Pen {
+    nose: [&'static str; 2],
+    top: &'static str,
+    wall: (char, char),
+    joint: &'static str,
+    base: &'static str,
+}
+
+const UNICODE: Pen = Pen {
+    nose: ["  ╱╲", " ╱  ╲"],
+    top: "┌────┐",
+    wall: ('│', '│'),
+    joint: "├────┤",
+    base: "└┬──┬┘",
+};
+
+const ASCII: Pen = Pen {
+    nose: ["  /\\", " /  \\"],
+    top: "+----+",
+    wall: ('|', '|'),
+    joint: "+----+",
+    base: "+-++-+",
+};
+
+/// Draw `rocket` as art lines with aligned labels.
+pub fn rocket(rocket: &Rocket, ascii: bool) -> Block {
+    let pen = if ascii { &ASCII } else { &UNICODE };
     let stages = rocket.stages();
-
-    if stages.is_empty() {
-        return vec!["(empty rocket)".to_string()];
-    }
-
-    // Calculate stage heights based on propellant mass
-    let max_propellant = stages
+    let heaviest = stages
         .iter()
-        .map(|s| s.propellant_mass().as_kg())
+        .map(|s| s.wet_mass().as_kg())
         .fold(0.0_f64, f64::max);
 
-    let stage_heights: Vec<usize> = stages
+    // Label columns: engines, propellant, delta-v, each padded to line up.
+    let labels: Vec<[String; 3]> = stages
         .iter()
-        .map(|s| {
-            let ratio = s.propellant_mass().as_kg() / max_propellant;
-            let height = (ratio * MAX_STAGE_HEIGHT as f64).round() as usize;
-            height.max(MIN_STAGE_HEIGHT)
+        .enumerate()
+        .map(|(i, s)| {
+            [
+                format!("{} × {}", s.engine_count(), s.engine().name()),
+                format!("{} t propellant", tonnes(s.propellant_mass().as_kg())),
+                format!(
+                    "{} m/s",
+                    format_thousands_f64(rocket.stage_delta_v(i).as_mps())
+                ),
+            ]
+        })
+        .collect();
+    let widths: Vec<usize> = (0..3)
+        .map(|c| {
+            labels
+                .iter()
+                .map(|l| l[c].chars().count())
+                .max()
+                .unwrap_or(0)
         })
         .collect();
 
-    // Draw nose cone (payload)
-    lines.extend(draw_nose_cone(payload_kg));
+    let art = |s: &str| format!("{s:<ART_WIDTH$}");
+    let mut lines = vec![
+        Text::new()
+            .muted(art(pen.nose[0]))
+            .muted("payload    ")
+            .strong(format!(
+                "{} kg",
+                format_thousands_f64(rocket.payload().as_kg())
+            )),
+        Text::new().muted(pen.nose[1]),
+        Text::new().muted(art(pen.top)),
+    ];
 
-    // Draw stages from top to bottom (reverse order - upper stages first)
+    // Top stage first, as it stands on the pad.
     for (i, stage) in stages.iter().enumerate().rev() {
-        let stage_num = i + 1;
-        let height = stage_heights[i];
-        let engine_name = stage.engine().name();
-        let engine_count = stage.engine_count();
-        let propellant_kg = stage.propellant_mass().as_kg();
-
-        lines.extend(draw_stage(
-            stage_num,
-            height,
-            engine_name,
-            engine_count,
-            propellant_kg,
-        ));
-    }
-
-    // Draw nozzles/fins at bottom
-    lines.extend(draw_nozzles());
-
-    lines
-}
-
-/// Draw the nose cone section representing the payload.
-fn draw_nose_cone(payload_kg: f64) -> Vec<String> {
-    let half_width = ROCKET_WIDTH / 2;
-    let payload_label = format!("Payload ({} kg)", format_mass(payload_kg));
-
-    vec![
-        format!("{:>width$}", "/\\", width = half_width + 2),
-        format!("{:>width$}", "/  \\", width = half_width + 3),
-        format!(
-            "{:>width$}   <- {}",
-            "/    \\",
-            payload_label,
-            width = half_width + 4
-        ),
-        format!("{:>width$}", "/______\\", width = half_width + 5),
-    ]
-}
-
-/// Draw a single stage as a box with label.
-fn draw_stage(
-    stage_num: usize,
-    height: usize,
-    engine_name: &str,
-    engine_count: u32,
-    propellant_kg: f64,
-) -> Vec<String> {
-    let mut lines = Vec::new();
-    let half_width = ROCKET_WIDTH / 2;
-
-    // Build labels for this stage
-    let stage_label = format!("S{}", stage_num);
-    let engine_label = format!("{} x{}", engine_name, engine_count);
-    let prop_label = format!("{} kg", format_mass(propellant_kg));
-
-    // Top border (only if first stage drawn, otherwise stages connect)
-    // We don't draw top border - previous section provides it
-
-    // Stage body
-    let middle_line = height / 2;
-    for line_idx in 0..height {
-        let left_pad = half_width - ROCKET_WIDTH / 2 + 1;
-        let body = format!(
-            "{:pad$}|{:^width$}|",
-            "",
-            if line_idx == middle_line {
-                &stage_label
+        let rows = ((stage.wet_mass().as_kg() / heaviest).sqrt() * MAX_ROWS)
+            .round()
+            .max(1.0) as usize;
+        let middle = rows / 2;
+        for row in 0..rows {
+            let inside = if row == middle {
+                format!("{:^4}", format!("S{}", i + 1))
             } else {
-                ""
-            },
-            pad = left_pad,
-            width = ROCKET_WIDTH
-        );
-
-        // Add annotation on specific lines
-        let annotation = if line_idx == 0 {
-            format!("  <- Stage {}: {}", stage_num, engine_label)
-        } else if line_idx == 1 {
-            format!("     {}", prop_label)
-        } else {
-            String::new()
-        };
-
-        lines.push(format!("{}{}", body, annotation));
+                "    ".to_string()
+            };
+            let wall = Text::new()
+                .muted(pen.wall.0.to_string())
+                .accent(inside)
+                .muted(pen.wall.1.to_string());
+            let mut line = Text(wall.0);
+            if row == middle {
+                let l = &labels[i];
+                line = line
+                    .plain(" ".repeat(ART_WIDTH - 6))
+                    .muted(format!("stage {:<5}", i + 1))
+                    .accent(format!("{:<w$}   ", l[0], w = widths[0]))
+                    .plain(format!("{:>w$}   ", l[1], w = widths[1]))
+                    .strong(format!("{:>w$}", l[2], w = widths[2]));
+            }
+            lines.push(line);
+        }
+        lines.push(Text::new().muted(if i == 0 { pen.base } else { pen.joint }));
     }
-
-    // Bottom border
-    let left_pad = half_width - ROCKET_WIDTH / 2 + 1;
-    lines.push(format!(
-        "{:pad$}|{:_^width$}|",
-        "",
-        "",
-        pad = left_pad,
-        width = ROCKET_WIDTH
-    ));
-
-    lines
+    // The body lines start one column in from the nose's left edge
+    let lines = lines
+        .into_iter()
+        .map(|l| {
+            let mut spans = vec![super::doc::Span {
+                text: " ".into(),
+                tone: Tone::Plain,
+            }];
+            spans.extend(l.0);
+            Text(spans)
+        })
+        .collect();
+    Block::Art(lines)
 }
 
-/// Draw the nozzle section at the bottom of the rocket.
-fn draw_nozzles() -> Vec<String> {
-    let half_width = ROCKET_WIDTH / 2;
-    vec![
-        format!("{:>width$}", "\\    /", width = half_width + 4),
-        format!("{:>width$}", "\\  /", width = half_width + 3),
-        format!("{:>width$}", "\\/", width = half_width + 2),
-    ]
-}
-
-/// Format mass with thousands separators for display.
-fn format_mass(kg: f64) -> String {
-    if kg >= 1_000_000.0 {
-        format!("{:.1}M", kg / 1_000_000.0)
-    } else if kg >= 1_000.0 {
-        format!("{:.0}k", kg / 1_000.0)
+/// Tonnes with one decimal below 1,000 t, none above.
+fn tonnes(kg: f64) -> String {
+    let t = kg / 1000.0;
+    if t < 1_000.0 {
+        format!("{t:.1}")
     } else {
-        format!("{:.0}", kg)
+        format_thousands_f64(t)
     }
-}
-
-/// Print the rocket diagram to stdout.
-pub fn print_rocket_diagram(rocket: &Rocket, payload_kg: f64) {
-    println!();
-    for line in generate_rocket_diagram(rocket, payload_kg) {
-        println!("{}", line);
-    }
-    println!();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
-    use tsiolkovsky::stage::{Rocket, Stage};
-    use tsiolkovsky::units::{Force, Isp, Mass};
+    use tsiolkovsky::engine::EngineDatabase;
+    use tsiolkovsky::stage::Stage;
+    use tsiolkovsky::units::Mass;
 
-    fn make_test_rocket() -> Rocket {
-        let engine = Engine::new(
-            "TestEngine",
-            Force::newtons(1_000_000.0),
-            Force::newtons(1_100_000.0),
-            Isp::seconds(300.0),
-            Isp::seconds(350.0),
-            Mass::kg(1000.0),
-            Propellant::LoxCh4,
+    fn two_stage() -> Rocket {
+        let raptor = EngineDatabase::builtin().get("raptor-2").unwrap().clone();
+        Rocket::new(
+            vec![
+                Stage::with_structural_ratio(raptor.clone(), 7, Mass::kg(1_000_000.0), 0.05)
+                    .unwrap(),
+                Stage::with_structural_ratio(raptor, 1, Mass::kg(30_000.0), 0.08).unwrap(),
+            ],
+            Mass::kg(5_000.0),
         )
-        .unwrap();
+        .unwrap()
+    }
 
-        let stage1 =
-            Stage::new(engine.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0)).unwrap();
-        let stage2 = Stage::new(engine, 1, Mass::kg(100_000.0), Mass::kg(5_000.0)).unwrap();
-        let payload = Mass::kg(5_000.0);
-
-        Rocket::new(vec![stage1, stage2], payload).unwrap()
+    fn text(block: &Block) -> Vec<String> {
+        match block {
+            Block::Art(lines) => lines.iter().map(Text::plain_text).collect(),
+            _ => panic!("not art"),
+        }
     }
 
     #[test]
-    fn diagram_generates_lines() {
-        let rocket = make_test_rocket();
-        let lines = generate_rocket_diagram(&rocket, 5000.0);
-
-        assert!(!lines.is_empty());
-        // Should have nose cone + stages + nozzles
-        assert!(lines.len() >= 10);
+    fn stages_are_labelled_top_down() {
+        let lines = text(&rocket(&two_stage(), false));
+        let s2 = lines.iter().position(|l| l.contains("stage 2")).unwrap();
+        let s1 = lines.iter().position(|l| l.contains("stage 1")).unwrap();
+        assert!(s2 < s1);
+        assert!(lines[s1].contains("7 × Raptor-2"));
+        assert!(lines[0].contains("5,000 kg"));
     }
 
     #[test]
-    fn diagram_contains_stage_labels() {
-        let rocket = make_test_rocket();
-        let diagram = generate_rocket_diagram(&rocket, 5000.0).join("\n");
-
-        assert!(diagram.contains("S1"));
-        assert!(diagram.contains("S2"));
+    fn bigger_stages_are_taller_but_small_ones_still_show() {
+        let lines = text(&rocket(&two_stage(), false));
+        let body = |label: &str| {
+            let at = lines.iter().position(|l| l.contains(label)).unwrap();
+            let up = lines[..at]
+                .iter()
+                .rev()
+                .take_while(|l| l.contains('│'))
+                .count();
+            let down = lines[at + 1..]
+                .iter()
+                .take_while(|l| l.contains('│'))
+                .count();
+            up + down + 1
+        };
+        assert!(body("stage 1") > body("stage 2"));
+        assert!(body("stage 2") >= 1);
     }
 
     #[test]
-    fn diagram_contains_payload_label() {
-        let rocket = make_test_rocket();
-        let diagram = generate_rocket_diagram(&rocket, 5000.0).join("\n");
-
-        assert!(diagram.contains("Payload"));
+    fn labels_line_up() {
+        let lines = text(&rocket(&two_stage(), false));
+        let col = |label: &str| {
+            let line = lines.iter().find(|l| l.contains(label)).unwrap();
+            line.find(" m/s").unwrap()
+        };
+        assert_eq!(col("stage 1"), col("stage 2"));
     }
 
     #[test]
-    fn diagram_with_real_engine() {
-        let db = EngineDatabase::load_embedded().expect("load database");
-        let raptor = db.get("raptor-2").expect("get raptor");
-
-        let stage1 =
-            Stage::new(raptor.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0)).unwrap();
-        let stage2 = Stage::new(raptor.clone(), 1, Mass::kg(100_000.0), Mass::kg(5_000.0)).unwrap();
-        let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(5_000.0)).unwrap();
-
-        let diagram = generate_rocket_diagram(&rocket, 5000.0).join("\n");
-
-        assert!(diagram.contains("Raptor-2"));
-    }
-
-    #[test]
-    fn format_mass_thousands() {
-        assert_eq!(format_mass(500.0), "500");
-        assert_eq!(format_mass(5_000.0), "5k");
-        assert_eq!(format_mass(100_000.0), "100k");
-        assert_eq!(format_mass(1_500_000.0), "1.5M");
-    }
-
-    #[test]
-    fn single_stage_rocket() {
-        let engine = Engine::new(
-            "SingleEngine",
-            Force::newtons(1_000_000.0),
-            Force::newtons(1_100_000.0),
-            Isp::seconds(300.0),
-            Isp::seconds(350.0),
-            Mass::kg(1000.0),
-            Propellant::LoxCh4,
-        )
-        .unwrap();
-
-        let stage = Stage::new(engine, 1, Mass::kg(50_000.0), Mass::kg(3_000.0)).unwrap();
-        let rocket = Rocket::new(vec![stage], Mass::kg(1_000.0)).unwrap();
-
-        let lines = generate_rocket_diagram(&rocket, 1000.0);
-        assert!(!lines.is_empty());
-
-        let diagram = lines.join("\n");
-        assert!(diagram.contains("S1"));
+    fn ascii_pen_draws_in_ascii() {
+        // Labels may hold symbols like ×; the renderer spells those out.
+        for line in text(&rocket(&two_stage(), true)) {
+            let drawing: String = line.chars().take(ART_WIDTH).collect();
+            assert!(drawing.is_ascii(), "{line}");
+        }
     }
 }

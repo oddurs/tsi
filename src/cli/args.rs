@@ -13,6 +13,25 @@ Examples:
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+
+    /// When to use colour (NO_COLOR is respected in auto)
+    #[arg(long, global = true, value_enum, default_value = "auto")]
+    pub color: ColorWhen,
+
+    /// Draw with plain ASCII instead of box and block characters
+    #[arg(long, global = true)]
+    pub ascii: bool,
+}
+
+/// When to colour output.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ColorWhen {
+    /// Colour when writing to a terminal, unless NO_COLOR is set
+    Auto,
+    /// Always colour, even into a pipe
+    Always,
+    /// Never colour
+    Never,
 }
 
 #[derive(Subcommand)]
@@ -92,17 +111,19 @@ pub struct CalculateArgs {
     #[arg(long, default_value = "0.1")]
     pub structural_ratio: f64,
 
-    /// Output format (default: pretty, compact: one-line summary)
+    /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: CalculateOutputFormat,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum CalculateOutputFormat {
-    /// Multi-line detailed output
+    /// Readable summary
     Pretty,
     /// One-line summary: Δv | Burn | TWR
     Compact,
+    /// JSON document
+    Json,
 }
 
 impl CalculateArgs {
@@ -132,7 +153,7 @@ impl CalculateArgs {
 #[derive(Args)]
 pub struct EnginesArgs {
     /// Output format
-    #[arg(short, long, value_enum, default_value = "table")]
+    #[arg(short, long, value_enum, default_value = "pretty")]
     pub output: OutputFormat,
 
     /// Filter by propellant type (e.g., loxch4, loxrp1, loxlh2)
@@ -150,9 +171,10 @@ pub struct EnginesArgs {
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
-    /// Human-readable table
-    Table,
-    /// JSON array
+    /// Readable table
+    #[value(alias = "table")]
+    Pretty,
+    /// JSON document
     Json,
 }
 
@@ -242,7 +264,7 @@ pub struct OptimizeArgs {
     #[arg(long)]
     pub seed: Option<u64>,
 
-    /// Show ASCII rocket diagram
+    /// Draw the rocket, stages to scale (--ascii for plain characters)
     #[arg(long)]
     pub diagram: bool,
 

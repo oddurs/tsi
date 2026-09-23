@@ -1,0 +1,71 @@
+---
+source: tests/cli.rs
+expression: "pretty(&[\"optimize\", \"--payload\", \"5000\", \"--target-dv\", \"9400\", \"--engine\",\n\"merlin-1d,rl-10c\", \"--max-stages\", \"3\", \"--diagram\", \"--show-losses\",\n\"--monte-carlo\", \"2000\", \"--seed\", \"7\", \"--quiet\",])"
+---
+
+tsi optimize  ·  5,000 kg to 9,400 m/s
+
+  Liftoff   76,166 kg   3 stages, 13m 34s of burning
+  Payload   5,000 kg    6.56% of the liftoff mass
+
+  Stage      Engines        Propellant  Dry mass    Isp         Δv  TWR
+  1 booster  2 × Merlin-1D   37,122 kg  3,910 kg  305 s  2,000 m/s  2.26 liftoff
+  2 upper    2 × RL-10C      18,858 kg  1,889 kg  453 s  3,418 m/s  0.62 ignition
+  3 upper    1 × RL-10C       8,516 kg    871 kg  453 s  3,982 m/s  0.75 ignition
+  ───────────────────────────────────────────────────────────────────────────────
+  total                      64,497 kg  6,670 kg         9,400 m/s
+
+  Δv     ██████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒   9,400 m/s
+         █ stage 1 21%   ▓ stage 2 36%   ▒ stage 3 42%
+
+  Mass   ██████████████████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒░░░   76,166 kg
+         █ stage 1 54%   ▓ stage 2 27%   ▒ stage 3 12%   ░ payload 7%
+
+  Margin        0 m/s        hits the target exactly; --margin adds headroom
+  Booster Isp   305 s        stage 1, averaged over the climb (311 s in vacuum)
+  Optimizer     Analytical   [n] configurations evaluated
+
+  The rocket
+
+     ╱╲      payload    5,000 kg
+    ╱  ╲
+   ┌────┐
+   │    │
+   │ S3 │    stage 3    1 × RL-10C       8.5 t propellant   3,982 m/s
+   ├────┤
+   │    │
+   │    │
+   │ S2 │    stage 2    2 × RL-10C      18.9 t propellant   3,418 m/s
+   │    │
+   ├────┤
+   │    │
+   │    │
+   │ S1 │    stage 1    2 × Merlin-1D   37.1 t propellant   2,000 m/s
+   │    │
+   │    │
+   └┬──┬┘
+
+  Losses on the way to low Earth orbit
+
+  Gravity    343 m/s   ████████████████████████████████████████████████
+  Drag       183 m/s   █████████████████████████▋
+  Steering   100 m/s   ██████████████
+
+  Ideal Δv   9,400 m/s
+  Losses     −626 m/s    first-order estimates; see docs/physics.md
+  Left       8,774 m/s   974 m/s to spare over orbital velocity
+  Orbit      7,800 m/s   circular, 200 km
+
+  Monte Carlo: this design built 2,000 times
+
+  Success       50.4%               reach 9,400 m/s, low confidence
+  Delta-v       9,296 – 9,499 m/s   5th to 95th percentile, median 9,401
+  Uncertainty   Isp ±1%, thrust ±2%, structure ±5%  (1σ, each stage)
+  Seed          7                   repeat with --seed 7
+
+                 ▁  ▃▃▂▆▆█▅▇▃▄▂▂▁
+        ▁▁▁▂▃▃▄▄▇████████████████▆▇▄▅▃▂▁▁▁
+  ───────────────────────▲────────────────────────
+  9,188                9,400             9,620 m/s
+
+  ▲ For 95% confidence, design in +104 m/s (--margin 1.2)
