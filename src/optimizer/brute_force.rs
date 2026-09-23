@@ -1,32 +1,6 @@
 //! Brute force grid search over staging configurations.
 //!
-//! Where the [`AnalyticalOptimizer`](super::AnalyticalOptimizer) reasons its
-//! way to an optimum, this optimizer simply tries configurations and keeps
-//! the lightest one that works. It shares no search logic with the analytical
-//! optimizer, which is what makes it useful as a cross-check: when they
-//! agree, both are probably right.
-//!
-//! # Search Space
-//!
-//! - Number of stages (from the problem's stage count range)
-//! - Engine type per stage (every candidate engine, no pruning)
-//! - Propellant mass per stage (a logarithmic grid)
-//!
-//! Engine count is not searched. For a given engine and propellant load the
-//! fewest engines that meet the TWR constraint are always best, since extra
-//! engines only add dry mass, and that number has a closed form.
-//!
-//! # Search Strategy
-//!
-//! 1. **Coarse search** over a propellant grid scaled to the payload, from
-//!    a twentieth of the payload mass to two thousand times it.
-//!    If nothing feasible turns up, the grid doubles in density, up to
-//!    three times: near the limits of an engine the feasible region is thin.
-//! 2. **Refinement**: repeated finer grids centred on the best configuration,
-//!    halving the span (in log space) each round.
-//! 3. **Parallel and streaming**: rayon splits the search at the top stage,
-//!    and each thread walks its share depth-first. Memory stays constant no
-//!    matter how large the grid is.
+//! The theory is documented on the public type below, where rustdoc shows it.
 
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -48,6 +22,34 @@ const DEFAULT_MAX_PROPELLANT_PER_PAYLOAD: f64 = 2_000.0;
 const COARSE_ATTEMPTS: u32 = 4;
 
 /// Brute force optimizer for staging problems.
+///
+/// Where the [`AnalyticalOptimizer`](super::AnalyticalOptimizer) reasons its
+/// way to an optimum, this optimizer simply tries configurations and keeps
+/// the lightest one that works. It shares no search logic with the analytical
+/// optimizer, which is what makes it useful as a cross-check: when they
+/// agree, both are probably right.
+///
+/// # Search Space
+///
+/// - Number of stages (from the problem's stage count range)
+/// - Engine type per stage (every candidate engine, no pruning)
+/// - Propellant mass per stage (a logarithmic grid)
+///
+/// Engine count is not searched. For a given engine and propellant load the
+/// fewest engines that meet the TWR constraint are always best, since extra
+/// engines only add dry mass, and that number has a closed form.
+///
+/// # Search Strategy
+///
+/// 1. **Coarse search** over a propellant grid scaled to the payload, from
+///    a twentieth of the payload mass to two thousand times it.
+///    If nothing feasible turns up, the grid doubles in density, up to
+///    three times: near the limits of an engine the feasible region is thin.
+/// 2. **Refinement**: repeated finer grids centred on the best configuration,
+///    halving the span (in log space) each round.
+/// 3. **Parallel and streaming**: rayon splits the search at the top stage,
+///    and each thread walks its share depth-first. Memory stays constant no
+///    matter how large the grid is.
 ///
 /// # Example
 ///

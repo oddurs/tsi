@@ -1,5 +1,7 @@
 # tsi
 
+[![CI](https://github.com/oddurs/tsi/actions/workflows/ci.yml/badge.svg)](https://github.com/oddurs/tsi/actions/workflows/ci.yml)
+
 A command-line tool for rocket staging analysis and optimization.
 
 Named after [Konstantin Tsiolkovsky](https://en.wikipedia.org/wiki/Konstantin_Tsiolkovsky), the father of astronautics who derived the fundamental rocket equation in 1903.

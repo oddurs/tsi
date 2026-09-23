@@ -38,13 +38,12 @@ The phase-by-phase plan that got tsi to v0.6 is archived in
 
 ## v0.7 — Static fire
 
-`#########·` 82% · 14 of 17 done · due 2026-10-06
+`#########·` 88% · 15 of 17 done · due 2026-10-06
 
 The engine lights on the test stand before anything is stacked on it.
 
 ### planned
 
-- [ ] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
 - [ ] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
 
 ### in progress
@@ -54,6 +53,7 @@ The engine lights on the test stand before anything is stacked on it.
 ### done
 
 - [x] [`0006`](https://github.com/oddurs/tsi/blob/main/cairn/items/0006-make-clippy-clean-across-all-targets.md) Make clippy clean across all targets <sup>chore · p0 · s · infra</sup>
+- [x] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
 - [x] [`0009`](https://github.com/oddurs/tsi/blob/main/cairn/items/0009-analytical-optimizer-is-11-heavier-than-brute-force.md) Analytical optimizer is 11% heavier than brute force <sup>bug · p0 · l · optimizer</sup>
 - [x] [`0010`](https://github.com/oddurs/tsi/blob/main/cairn/items/0010-stage-1-delta-v-uses-vacuum-isp.md) Stage 1 delta-v uses vacuum Isp <sup>bug · p0 · m · physics</sup>
 - [x] [`0011`](https://github.com/oddurs/tsi/blob/main/cairn/items/0011-monte-carlo-re-optimizes-each-sample-instead-of-stressing-one-design.md) Monte Carlo re-optimizes each sample instead of stressing one design <sup>bug · p0 · l · optimizer</sup>

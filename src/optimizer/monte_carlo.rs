@@ -1,68 +1,6 @@
 //! Monte Carlo simulation for uncertainty analysis.
 //!
-//! A design on paper hits its target exactly. The rocket that gets built
-//! won't: engines come off the line a percent or so off their rated Isp,
-//! welds and wiring make the structure heavier or lighter than drawn, and
-//! thrust varies with chamber pressure. Monte Carlo analysis asks how
-//! often *this design*, built with those errors, still does its job.
-//!
-//! # How It Works
-//!
-//! 1. Optimize the nominal problem, or take a design you already have.
-//! 2. For each iteration, build the design again with every stage's as-built
-//!    parameters drawn from their distributions:
-//!    - one Isp factor per stage, scaling sea-level and vacuum Isp together
-//!      (a worse engine is worse at every altitude)
-//!    - one thrust factor per stage, likewise
-//!    - one factor on each stage's structural mass
-//! 3. Evaluate the delta-v and liftoff TWR of each build.
-//!
-//! The design itself never changes between samples. Earlier versions of tsi
-//! re-optimized every sample, which measured whether *some* rocket could be
-//! found under perturbed parameters. That is a different question, and it
-//! always came out "yes".
-//!
-//! # Reproducibility
-//!
-//! Every run has a seed, reported in the results. Each sample draws from its
-//! own generator seeded by (seed, sample index), so the same seed gives
-//! bit-identical results however many threads rayon uses.
-//!
-//! # Interpreting Results
-//!
-//! - **Success probability**: fraction of builds reaching the target delta-v
-//!   that can also lift off (liftoff TWR > 1)
-//! - **Confidence intervals**: range of delta-v the builds achieve
-//! - **Required margin**: how much delta-v to design in for a given confidence
-//!
-//! A zero-margin design succeeds about half the time, since half of all builds
-//! come out below nominal. Adding margin ([`Constraints::margin`]) is how a
-//! design buys confidence.
-//!
-//! # Example
-//!
-//! ```
-//! use tsi::optimizer::{Problem, Constraints, Uncertainty, MonteCarloRunner};
-//! use tsi::engine::EngineDatabase;
-//! use tsi::units::{Mass, Ratio, Velocity};
-//!
-//! let db = EngineDatabase::load_embedded().expect("load db");
-//! let engine = db.get("raptor-2").expect("engine");
-//!
-//! let problem = Problem::new(
-//!     Mass::kg(5_000.0),
-//!     Velocity::mps(9_400.0),
-//!     vec![engine.clone()],
-//!     Constraints::default().with_margin(Ratio::new(0.02)),
-//! ).with_stage_count(2);
-//!
-//! let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(42);
-//! let results = runner.run(&problem, 1000).expect("monte carlo");
-//!
-//! // 2% margin covers most, but not all, manufacturing variation
-//! assert!(results.success_probability() > 0.9);
-//! println!("Delta-v 5th percentile: {:.0} m/s", results.delta_v_percentile(5.0));
-//! ```
+//! The theory is documented on the public type below, where rustdoc shows it.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -363,6 +301,70 @@ fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
 }
 
 /// Monte Carlo simulation runner.
+///
+/// A design on paper hits its target exactly. The rocket that gets built
+/// won't: engines come off the line a percent or so off their rated Isp,
+/// welds and wiring make the structure heavier or lighter than drawn, and
+/// thrust varies with chamber pressure. Monte Carlo analysis asks how
+/// often *this design*, built with those errors, still does its job.
+///
+/// # How It Works
+///
+/// 1. Optimize the nominal problem, or take a design you already have.
+/// 2. For each iteration, build the design again with every stage's as-built
+///    parameters drawn from their distributions:
+///    - one Isp factor per stage, scaling sea-level and vacuum Isp together
+///      (a worse engine is worse at every altitude)
+///    - one thrust factor per stage, likewise
+///    - one factor on each stage's structural mass
+/// 3. Evaluate the delta-v and liftoff TWR of each build.
+///
+/// The design itself never changes between samples. Earlier versions of tsi
+/// re-optimized every sample, which measured whether *some* rocket could be
+/// found under perturbed parameters. That is a different question, and it
+/// always came out "yes".
+///
+/// # Reproducibility
+///
+/// Every run has a seed, reported in the results. Each sample draws from its
+/// own generator seeded by (seed, sample index), so the same seed gives
+/// bit-identical results however many threads rayon uses.
+///
+/// # Interpreting Results
+///
+/// - **Success probability**: fraction of builds reaching the target delta-v
+///   that can also lift off (liftoff TWR > 1)
+/// - **Confidence intervals**: range of delta-v the builds achieve
+/// - **Required margin**: how much delta-v to design in for a given confidence
+///
+/// A zero-margin design succeeds about half the time, since half of all builds
+/// come out below nominal. Adding margin ([`Constraints::margin`](super::Constraints::margin)) is how a
+/// design buys confidence.
+///
+/// # Example
+///
+/// ```
+/// use tsi::optimizer::{Problem, Constraints, Uncertainty, MonteCarloRunner};
+/// use tsi::engine::EngineDatabase;
+/// use tsi::units::{Mass, Ratio, Velocity};
+///
+/// let db = EngineDatabase::load_embedded().expect("load db");
+/// let engine = db.get("raptor-2").expect("engine");
+///
+/// let problem = Problem::new(
+///     Mass::kg(5_000.0),
+///     Velocity::mps(9_400.0),
+///     vec![engine.clone()],
+///     Constraints::default().with_margin(Ratio::new(0.02)),
+/// ).with_stage_count(2);
+///
+/// let runner = MonteCarloRunner::new(Uncertainty::default()).with_seed(42);
+/// let results = runner.run(&problem, 1000).expect("monte carlo");
+///
+/// // 2% margin covers most, but not all, manufacturing variation
+/// assert!(results.success_probability() > 0.9);
+/// println!("Delta-v 5th percentile: {:.0} m/s", results.delta_v_percentile(5.0));
+/// ```
 ///
 /// Builds a fixed design many times with perturbed as-built parameters and
 /// measures how often it still meets its target.

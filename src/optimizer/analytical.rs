@@ -1,65 +1,6 @@
 //! Analytical staging optimizer: Lagrange multipliers, then refinement.
 //!
-//! # The staging problem
-//!
-//! A rocket of N stages must deliver a total delta-v Δv to a payload, and we
-//! want the lightest rocket that does it. The rocket equation gives each
-//! stage's contribution, `Δvᵢ = cᵢ ln Rᵢ`, where cᵢ is its effective exhaust
-//! velocity and Rᵢ its mass ratio. The question is how to split Δv between
-//! the stages.
-//!
-//! # The classical answer
-//!
-//! Write εᵢ for each stage's structural coefficient: its dry mass as a
-//! fraction of its dry-plus-propellant mass. If the εᵢ are constants, the
-//! liftoff mass is a product of per-stage factors and the problem can be
-//! solved exactly with a Lagrange multiplier η. Setting the gradient of
-//! ln(liftoff mass) − η·(Σ cᵢ ln Rᵢ − Δv) to zero gives, for every stage,
-//!
-//! ```text
-//!        cᵢη − 1
-//! Rᵢ  =  ────────        with η fixed by   Σ cᵢ ln Rᵢ = Δv
-//!         cᵢεᵢη
-//! ```
-//!
-//! The left side of the constraint rises steadily with η, so a bisection
-//! finds it. For identical stages (same c, same ε) every Rᵢ is equal and
-//! **the optimum splits delta-v equally**. This is the textbook result, and
-//! it is why the old tsi optimizer used a 50/50 split.
-//!
-//! # Why that is not quite the answer
-//!
-//! Real stages carry engines, and an engine's mass is fixed; it does not
-//! scale with propellant load. A stage's ε therefore depends on how big the
-//! stage is, which is what the classical solution assumes it does not. A
-//! small upper stage with a heavy engine has a large ε. The fix is to move
-//! delta-v off the upper stage and onto the booster, which is better at
-//! amortizing its engines. Two further effects:
-//!
-//! - An Earth-launched first stage flies through the atmosphere, so its
-//!   effective Isp is lower than an upper stage's using the same engine (see
-//!   [`IspModel`](crate::physics::IspModel)). That also moves the optimum.
-//! - Engine counts are whole numbers, set by TWR (see the sizing notes on
-//!   the minimum engine count).
-//!
-//! So this optimizer uses the Lagrange solution as its starting point, then
-//! refines the split numerically against the exact mass model, including
-//! engine mass and integer engine counts. For the README example
-//! (5 t payload, 9,400 m/s, Raptor-2) the best split is about
-//! 4,400/5,000 m/s. tsi v0.6 used the equal split, and a brute-force grid
-//! search beat it by 11% on this very problem.
-//!
-//! # Scope
-//!
-//! Any number of stages and any set of engines. Every assignment of engines
-//! to stages is tried, which grows as (engines)^(stages). Engines can be
-//! pinned to particular stages to narrow the search.
-//!
-//! # References
-//!
-//! - Curtis, H.D. *Orbital Mechanics for Engineering Students*, 3rd ed., §11.6
-//!   "Optimal staging"
-//! - Sutton, G.P. and Biblarz, O. *Rocket Propulsion Elements*, 9th ed., §4.7
+//! The theory is documented on the public type below, where rustdoc shows it.
 
 use std::time::Instant;
 
@@ -86,8 +27,68 @@ const MAX_SWEEPS: usize = 40;
 
 /// Staging optimizer based on the Lagrange multiplier solution.
 ///
+/// # The staging problem
+///
+/// A rocket of N stages must deliver a total delta-v Δv to a payload, and we
+/// want the lightest rocket that does it. The rocket equation gives each
+/// stage's contribution, `Δvᵢ = cᵢ ln Rᵢ`, where cᵢ is its effective exhaust
+/// velocity and Rᵢ its mass ratio. The question is how to split Δv between
+/// the stages.
+///
+/// # The classical answer
+///
+/// Write εᵢ for each stage's structural coefficient: its dry mass as a
+/// fraction of its dry-plus-propellant mass. If the εᵢ are constants, the
+/// liftoff mass is a product of per-stage factors and the problem can be
+/// solved exactly with a Lagrange multiplier η. Setting the gradient of
+/// ln(liftoff mass) − η·(Σ cᵢ ln Rᵢ − Δv) to zero gives, for every stage,
+///
+/// ```text
+///        cᵢη − 1
+/// Rᵢ  =  ────────        with η fixed by   Σ cᵢ ln Rᵢ = Δv
+///         cᵢεᵢη
+/// ```
+///
+/// The left side of the constraint rises steadily with η, so a bisection
+/// finds it. For identical stages (same c, same ε) every Rᵢ is equal and
+/// **the optimum splits delta-v equally**. This is the textbook result, and
+/// it is why the old tsi optimizer used a 50/50 split.
+///
+/// # Why that is not quite the answer
+///
+/// Real stages carry engines, and an engine's mass is fixed; it does not
+/// scale with propellant load. A stage's ε therefore depends on how big the
+/// stage is, which is what the classical solution assumes it does not. A
+/// small upper stage with a heavy engine has a large ε. The fix is to move
+/// delta-v off the upper stage and onto the booster, which is better at
+/// amortizing its engines. Two further effects:
+///
+/// - An Earth-launched first stage flies through the atmosphere, so its
+///   effective Isp is lower than an upper stage's using the same engine (see
+///   [`IspModel`](crate::physics::IspModel)). That also moves the optimum.
+/// - Engine counts are whole numbers, set by TWR (see the sizing notes on
+///   the minimum engine count).
+///
+/// So this optimizer uses the Lagrange solution as its starting point, then
+/// refines the split numerically against the exact mass model, including
+/// engine mass and integer engine counts. For the README example
+/// (5 t payload, 9,400 m/s, Raptor-2) the best split is about
+/// 4,400/5,000 m/s. tsi v0.6 used the equal split, and a brute-force grid
+/// search beat it by 11% on this very problem.
+///
+/// # Scope
+///
+/// Any number of stages and any set of engines. Every assignment of engines
+/// to stages is tried, which grows as (engines)^(stages). Engines can be
+/// pinned to particular stages to narrow the search.
+///
+/// # References
+///
+/// - Curtis, H.D. *Orbital Mechanics for Engineering Students*, 3rd ed., §11.6
+///   "Optimal staging"
+/// - Sutton, G.P. and Biblarz, O. *Rocket Propulsion Elements*, 9th ed., §4.7
+///
 /// Fast (milliseconds for typical problems) and exact to within numerical
-/// tolerance for the mass model tsi uses. See the [module documentation](self)
 /// for the theory.
 ///
 /// # When to Use
