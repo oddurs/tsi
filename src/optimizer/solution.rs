@@ -12,6 +12,11 @@ use crate::physics::IspModel;
 use crate::stage::Rocket;
 use crate::units::{Isp, Mass, Ratio, Time, Velocity};
 
+/// Version of the document a [`Solution`] serializes to (and that
+/// `tsi optimize --output json` prints). Raised whenever a field is removed or
+/// changes meaning; adding fields doesn't raise it.
+pub const JSON_SCHEMA_VERSION: u32 = 1;
+
 /// Rounding allowance when checking that a solution reaches its target.
 pub(crate) const DELTA_V_TOLERANCE_MPS: f64 = 1e-3;
 
@@ -188,6 +193,7 @@ impl Solution {
             })
             .collect();
         SolutionReport {
+            schema_version: JSON_SCHEMA_VERSION,
             target_delta_v_mps: self.target_delta_v,
             payload_kg: rocket.payload(),
             total_mass_kg: rocket.total_mass(),
@@ -207,11 +213,12 @@ impl Solution {
     }
 }
 
-/// A solution serializes as a report with every derived number filled in:
-/// per-stage delta-v, Isp, burn time and TWR as well as masses. Units are in
-/// the field names (`total_mass_kg`, `delta_v_mps`). This is the document
-/// `tsi optimize --output json` prints; its fields are listed in the command
-/// reference.
+/// A solution serializes as a versioned report ([`JSON_SCHEMA_VERSION`]) with
+/// every derived number filled in: per-stage delta-v, Isp, burn time and TWR
+/// as well as masses. Units are in the field names (`total_mass_kg`,
+/// `delta_v_mps`). `tsi optimize --output json` prints this document plus
+/// `design_margin_percent`, which belongs to the problem rather than the
+/// solution; the fields are listed in the command reference.
 impl Serialize for Solution {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.report().serialize(serializer)
@@ -221,6 +228,7 @@ impl Serialize for Solution {
 /// A [`Solution`] with every derived number filled in, for serialization.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct SolutionReport {
+    schema_version: u32,
     target_delta_v_mps: Velocity,
     payload_kg: Mass,
     total_mass_kg: Mass,
@@ -314,6 +322,15 @@ mod tests {
         assert_eq!(
             OptimizerKind::Other("Genetic".into()).to_string(),
             "Genetic"
+        );
+    }
+
+    #[test]
+    fn serialized_solution_carries_its_schema_version() {
+        let text = toml::to_string(&solution(8_000.0)).unwrap();
+        assert!(
+            text.contains(&format!("schema_version = {JSON_SCHEMA_VERSION}")),
+            "{text}"
         );
     }
 

@@ -148,17 +148,18 @@ impl MonteCarloResults {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn required_margin(&self, confidence: f64) -> f64 {
-        if self.delta_v_samples.is_empty() {
-            return 0.0;
-        }
-        // Find the percentile where we have (1 - confidence) failures
-        let failure_percentile = (1.0 - confidence) * 100.0;
-        let dv_at_percentile = self.delta_v_percentile(failure_percentile);
-        (self.target_delta_v.as_mps() - dv_at_percentile).max(0.0)
+        required_margin(
+            &sorted(&self.delta_v_samples),
+            self.target_delta_v,
+            confidence,
+        )
     }
 
     /// Everything above, ready to serialize.
     pub(crate) fn summary(&self) -> MonteCarloSummary {
+        // Sort each distribution once; every percentile reads from it.
+        let delta_v = sorted(&self.delta_v_samples);
+        let mass = sorted(&self.mass_samples);
         MonteCarloSummary {
             success_probability: self.success_probability(),
             total_runs: self.total_runs,
@@ -166,9 +167,9 @@ impl MonteCarloResults {
             failures: self.failures,
             target_delta_v_mps: self.target_delta_v,
             runtime_ms: self.runtime.as_millis() as u64,
-            delta_v: DistributionSummary::of(&self.delta_v_samples),
-            mass: DistributionSummary::of(&self.mass_samples),
-            required_margin_95_mps: self.required_margin(0.95),
+            delta_v: DistributionSummary::of(&delta_v),
+            mass: DistributionSummary::of(&mass),
+            required_margin_95_mps: required_margin(&delta_v, self.target_delta_v, 0.95),
             seed: self.seed,
             design_total_mass_kg: self.design.rocket().total_mass(),
             design_stage_count: self.design.rocket().stage_count(),
@@ -245,31 +246,52 @@ pub(crate) struct DistributionSummary {
 }
 
 impl DistributionSummary {
-    fn of(samples: &[f64]) -> Self {
+    /// Statistics of samples already sorted ascending.
+    fn of(sorted: &[f64]) -> Self {
         Self {
-            mean: mean(samples),
-            std_dev: std_dev(samples),
-            percentile_5: percentile_of(samples, 5.0),
-            percentile_50: percentile_of(samples, 50.0),
-            percentile_95: percentile_of(samples, 95.0),
-            min: samples.iter().copied().fold(f64::INFINITY, f64::min),
-            max: samples.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+            mean: mean(sorted),
+            std_dev: std_dev(sorted),
+            percentile_5: percentile_sorted(sorted, 5.0),
+            percentile_50: percentile_sorted(sorted, 50.0),
+            percentile_95: percentile_sorted(sorted, 95.0),
+            min: sorted.first().copied().unwrap_or(f64::INFINITY),
+            max: sorted.last().copied().unwrap_or(f64::NEG_INFINITY),
         }
     }
 }
 
-/// Calculate percentile of a sample set.
-fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-
+/// A sorted copy of some samples.
+fn sorted(samples: &[f64]) -> Vec<f64> {
     let mut sorted = samples.to_vec();
     sorted.sort_by(f64::total_cmp);
+    sorted
+}
 
+/// Calculate percentile of a sample set.
+fn percentile_of(samples: &[f64], percentile: f64) -> f64 {
+    percentile_sorted(&sorted(samples), percentile)
+}
+
+/// Percentile (0-100) of samples already sorted ascending, or 0 if empty.
+fn percentile_sorted(sorted: &[f64], percentile: f64) -> f64 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
     let p = percentile.clamp(0.0, 100.0) / 100.0;
     let idx = (p * (sorted.len() - 1) as f64).round() as usize;
     sorted[idx.min(sorted.len() - 1)]
+}
+
+/// Delta-v to add above `target` so that a fraction `confidence` of the
+/// (sorted) delta-v samples would reach it.
+fn required_margin(sorted_delta_v: &[f64], target: Velocity, confidence: f64) -> f64 {
+    if sorted_delta_v.is_empty() {
+        return 0.0;
+    }
+    // The percentile where (1 - confidence) of builds fall short
+    let failure_percentile = (1.0 - confidence) * 100.0;
+    let dv = percentile_sorted(sorted_delta_v, failure_percentile);
+    (target.as_mps() - dv).max(0.0)
 }
 
 /// Monte Carlo simulation runner.

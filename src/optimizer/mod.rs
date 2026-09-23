@@ -48,7 +48,7 @@ pub use analytical::AnalyticalOptimizer;
 pub use brute_force::BruteForceOptimizer;
 pub use monte_carlo::{MonteCarloResults, MonteCarloRunner};
 pub use problem::{ConstraintError, Constraints, Problem, ProblemBuilder, ProblemError};
-pub use solution::{OptimizerKind, Solution};
+pub use solution::{OptimizerKind, Solution, JSON_SCHEMA_VERSION};
 pub use uncertainty::{Uncertainty, UncertaintyError};
 
 use crate::units::{Mass, Ratio, Velocity};

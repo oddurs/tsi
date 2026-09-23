@@ -64,7 +64,7 @@ impl EngineDatabase {
     /// Returns a copy of [`EngineDatabase::builtin`]; prefer that when a
     /// reference is enough.
     pub fn load_embedded() -> Result<Self, DatabaseError> {
-        Self::parse(EMBEDDED_ENGINES, "the built-in database")
+        Ok(Self::builtin().clone())
     }
 
     /// Load an engine database from a TOML file.
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn load_embedded_database() {
         // Every engine passes Engine::new's checks, or this fails.
-        let db = EngineDatabase::load_embedded().unwrap();
+        let db = EngineDatabase::parse(EMBEDDED_ENGINES, "test").unwrap();
         assert_eq!(db.engines.len(), 11);
         assert_eq!(db.engines, EngineDatabase::builtin().engines);
     }

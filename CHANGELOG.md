@@ -84,6 +84,9 @@ fields in its JSON.
 - **Breaking:** loss estimates are `Velocity`, not `f64`. (#32)
 - `Propellant` and `IspModel` are `#[non_exhaustive]`.
 - The library denies `clippy::unwrap_used` and `clippy::expect_used`.
+  Invalid values are errors, not panics. Methods that take a stage index
+  (`Rocket::stage_delta_v` and friends) still panic past the top, as slice
+  indexing does, and say so; `Rocket::stage(i)` returns an `Option`.
 
 ### Fixed
 

@@ -1257,7 +1257,9 @@ fn custom_engine_rejects_nan() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Thrust must be positive"));
+        .stderr(predicate::str::contains(
+            "vacuum thrust must be a positive number",
+        ));
 }
 
 // ============================================================================
@@ -1499,4 +1501,49 @@ fn structural_ratio_list_rejects_garbage() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("expected a ratio"));
+}
+
+#[test]
+fn library_validation_errors_name_the_flag() {
+    for (args, flag) in [
+        (vec!["--min-twr", "0.5"], "--min-twr"),
+        (vec!["--stages", "0"], "--stages"),
+        (vec!["--max-engines", "0"], "--max-engines"),
+        (vec!["--structural-ratio", "1.5"], "--structural-ratio"),
+    ] {
+        tsi()
+            .args([
+                "optimize",
+                "--payload",
+                "5000",
+                "--target-dv",
+                "9400",
+                "--engine",
+                "raptor-2",
+            ])
+            .args(&args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid arguments"))
+            .stderr(predicate::str::contains(flag));
+    }
+}
+
+#[test]
+fn custom_engine_with_blank_name_is_rejected_by_the_library() {
+    tsi()
+        .args([
+            "optimize",
+            "--payload",
+            "5000",
+            "--target-dv",
+            "9400",
+            "--engine",
+            "raptor-2",
+            "--custom-engine",
+            "  :2000:350:1500:loxch4",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("engine name is empty"));
 }

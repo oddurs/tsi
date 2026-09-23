@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use anyhow::{bail, Result};
 use clap::CommandFactory;
@@ -8,8 +8,9 @@ use serde::Serialize;
 
 use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
 use tsiolkovsky::optimizer::{
-    AnalyticalOptimizer, BruteForceOptimizer, Constraints, Infeasibility, MonteCarloResults,
-    MonteCarloRunner, OptimizeError, Optimizer, Problem, Progress, Solution, Uncertainty,
+    AnalyticalOptimizer, BruteForceOptimizer, ConstraintError, Constraints, Infeasibility,
+    MonteCarloResults, MonteCarloRunner, OptimizeError, Optimizer, Problem, ProblemError, Progress,
+    Solution, Uncertainty,
 };
 use tsiolkovsky::physics::losses;
 use tsiolkovsky::physics::{burn_time, delta_v, twr, G0};
@@ -76,7 +77,7 @@ pub fn calculate(args: CalculateArgs) -> Result<()> {
         bail!("{}", msg.trim_end());
     }
 
-    let db = EngineDatabase::default();
+    let db = EngineDatabase::builtin();
 
     // Determine Isp and thrust from either --engine or explicit values
     let (isp, thrust, engine_name, propellant_name) = if let Some(ref engine_name) = args.engine {
@@ -216,7 +217,7 @@ pub fn calculate(args: CalculateArgs) -> Result<()> {
 }
 
 pub fn engines(args: EnginesArgs) -> Result<()> {
-    let db = EngineDatabase::default();
+    let db = EngineDatabase::builtin();
     let all_engines = db.list();
 
     // Apply filters
@@ -322,44 +323,9 @@ pub fn engines(args: EnginesArgs) -> Result<()> {
 
 /// Optimize staging for a rocket.
 pub fn optimize(args: OptimizeArgs) -> Result<()> {
-    // Validate inputs
-    let mut errors = Vec::new();
-
-    if !positive(args.payload) {
-        errors.push("--payload must be a positive number".to_string());
-    }
-    if !positive(args.target_dv) {
-        errors.push("--target-dv must be a positive number".to_string());
-    }
-    if !(args.min_twr.is_finite() && args.min_twr >= 1.0) {
-        errors.push("--min-twr must be >= 1.0 for liftoff".to_string());
-    }
-    if !positive(args.min_upper_twr) {
-        errors.push("--min-upper-twr must be positive".to_string());
-    }
-    if args.max_stages == 0 {
-        errors.push("--max-stages must be at least 1".to_string());
-    }
-    if args.stages == Some(0) {
-        errors.push("--stages must be at least 1".to_string());
-    }
-    if args.max_engines == 0 {
-        errors.push("--max-engines must be at least 1".to_string());
-    }
-    if args.structural_ratio.iter().any(|&r| !(r > 0.0 && r < 1.0)) {
-        errors.push("--structural-ratio values must be between 0 and 1".to_string());
-    }
-
-    if !errors.is_empty() {
-        let mut msg = "Invalid arguments:\n".to_string();
-        for e in &errors {
-            msg.push_str(&format!("  - {}\n", e));
-        }
-        bail!("{}", msg.trim_end());
-    }
-
+    // The library validates the problem; `explain_problem` names the flags.
     // Load engine database and look up engines (comma-separated)
-    let db = EngineDatabase::default();
+    let db = EngineDatabase::builtin();
     let engine_names: Vec<&str> = args.engine.split(',').map(|s| s.trim()).collect();
     let mut engines = Vec::new();
 
@@ -436,7 +402,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     }
     let problem = builder
         .build()
-        .map_err(|e| anyhow::anyhow!("Invalid problem: {e}"))?;
+        .map_err(|e| anyhow::anyhow!(explain_problem(&e)))?;
 
     if args.sea_level {
         eprintln!(
@@ -453,7 +419,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
             let mut optimizer = BruteForceOptimizer::default();
             if show_progress {
                 eprintln!("  Optimizer: BruteForce (parallel)");
-                optimizer = optimizer.with_progress(StderrProgress::default());
+                optimizer = optimizer.with_progress(StderrProgress::search());
             }
             optimizer.optimize(&problem)
         }
@@ -465,7 +431,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         Some(iterations) => {
             let mut runner = MonteCarloRunner::new(uncertainty_from_level(args.uncertainty));
             if show_progress {
-                runner = runner.with_progress(StderrProgress::default());
+                runner = runner.with_progress(StderrProgress::monte_carlo());
             }
             if let Some(seed) = args.seed {
                 runner = runner.with_seed(seed);
@@ -492,7 +458,6 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         }
         OptimizeOutputFormat::Json => {
             let output = OptimizeJson {
-                schema_version: JSON_SCHEMA_VERSION,
                 design_margin_percent: args.margin * 100.0,
                 solution: &solution,
                 monte_carlo: mc_results.as_ref(),
@@ -504,14 +469,10 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     Ok(())
 }
 
-/// Version of the `tsi optimize --output json` format. Raised whenever a
-/// field is removed or changes meaning; adding fields doesn't raise it.
-const JSON_SCHEMA_VERSION: u32 = 1;
-
-/// The JSON document `tsi optimize --output json` prints.
+/// The JSON document `tsi optimize --output json` prints: the solution's own
+/// versioned report, plus the margin the problem asked for.
 #[derive(Serialize)]
 struct OptimizeJson<'a> {
-    schema_version: u32,
     design_margin_percent: f64,
     #[serde(flatten)]
     solution: &'a Solution,
@@ -522,8 +483,19 @@ struct OptimizeJson<'a> {
 /// Turn an optimization error into a message with advice about which flags
 /// to change. The library reports causes; suggesting flags is the CLI's job.
 fn explain(error: &OptimizeError) -> String {
-    let OptimizeError::Infeasible(cause) = error else {
-        return error.to_string();
+    let cause = match error {
+        OptimizeError::Infeasible(cause) => cause,
+        OptimizeError::TooManyCombinations { .. } => {
+            return with_suggestions(
+                error.to_string(),
+                &[
+                    "Pin engines to stages with --stage1-engine and --stage2-engine".into(),
+                    "Offer fewer engines with --engine".into(),
+                    "Allow fewer stages with --max-stages".into(),
+                ],
+            )
+        }
+        _ => return error.to_string(),
     };
     let suggestions: Vec<String> = match cause {
         Infeasibility::StructuralLimit { .. } => vec![
@@ -564,15 +536,58 @@ fn explain(error: &OptimizeError) -> String {
         Infeasibility::SearchMissed { .. } => vec!["Use --optimizer analytical".into()],
         _ => vec![],
     };
-    let mut message = error.to_string();
+    with_suggestions(error.to_string(), &suggestions)
+}
+
+fn with_suggestions(mut message: String, suggestions: &[String]) -> String {
     if !suggestions.is_empty() {
         message.push_str("\n\nSuggestions:");
         for s in suggestions {
             message.push_str("\n  - ");
-            message.push_str(&s);
+            message.push_str(s);
         }
     }
     message
+}
+
+/// Turn a problem the library rejected into a message about the flag that
+/// set it. The library checks; the CLI knows which flag is which.
+fn explain_problem(error: &ProblemError) -> String {
+    let message = match error {
+        ProblemError::InvalidPayload(m) => {
+            format!("--payload must be a positive number, got {}", m.as_kg())
+        }
+        ProblemError::InvalidDeltaV(v) => {
+            format!("--target-dv must be a positive number, got {}", v.as_mps())
+        }
+        ProblemError::InvalidStageCount { requested, max } => {
+            format!("--stages {requested} is out of range: allowed 1 to {max} (raise --max-stages)")
+        }
+        ProblemError::Constraint(c) => match c {
+            ConstraintError::InvalidLiftoffTwr(r) => format!(
+                "--min-twr must be at least 1.0 to leave the pad, got {}",
+                r.as_f64()
+            ),
+            ConstraintError::InvalidStageTwr(r) => {
+                format!("--min-upper-twr must be positive, got {}", r.as_f64())
+            }
+            ConstraintError::ZeroStages => "--max-stages must be at least 1".into(),
+            ConstraintError::ZeroEngines => "--max-engines must be at least 1".into(),
+            ConstraintError::InvalidStructuralRatio(r) => format!(
+                "--structural-ratio values must be between 0 and 1, got {}",
+                r.as_f64()
+            ),
+            ConstraintError::InvalidMargin(r) => {
+                format!(
+                    "--margin must be zero or positive, got {}%",
+                    r.as_f64() * 100.0
+                )
+            }
+            other => other.to_string(),
+        },
+        other => other.to_string(),
+    };
+    format!("Invalid arguments:\n  - {message}")
 }
 
 /// The flag that sets the minimum TWR for a stage.
@@ -587,45 +602,79 @@ fn twr_flag(stage: usize) -> &'static str {
 /// Progress on stderr, in the same shape tsi has always printed: a phase
 /// line and "Searching... NN%" for brute force, "Monte Carlo: NN% (done/total)"
 /// for Monte Carlo.
-#[derive(Default)]
+///
+/// Rayon workers report from many threads at once, so drawing happens under a
+/// lock and only ever moves forward.
 struct StderrProgress {
-    total: AtomicU64,
-    shown: AtomicU64,
-    monte_carlo: AtomicBool,
+    style: ProgressStyle,
+    state: Mutex<ProgressState>,
+}
+
+#[derive(Clone, Copy)]
+enum ProgressStyle {
+    Search,
+    MonteCarlo,
+}
+
+#[derive(Default)]
+struct ProgressState {
+    total: u64,
+    /// Highest percentage drawn so far in this phase
+    shown: Option<u64>,
+}
+
+impl StderrProgress {
+    fn search() -> Self {
+        Self::new(ProgressStyle::Search)
+    }
+
+    fn monte_carlo() -> Self {
+        Self::new(ProgressStyle::MonteCarlo)
+    }
+
+    fn new(style: ProgressStyle) -> Self {
+        Self {
+            style,
+            state: Mutex::new(ProgressState::default()),
+        }
+    }
+
+    fn draw(&self, percent: u64, done: u64, total: u64) {
+        match self.style {
+            ProgressStyle::Search => eprint!("\r  Searching... {percent}%"),
+            ProgressStyle::MonteCarlo => eprint!("\rMonte Carlo: {percent}% ({done}/{total})"),
+        }
+        let _ = io::stderr().flush();
+    }
 }
 
 impl Progress for StderrProgress {
     fn start(&self, phase: &str, total: u64) {
-        self.total.store(total.max(1), Ordering::Relaxed);
-        self.shown.store(u64::MAX, Ordering::Relaxed);
-        let monte_carlo = phase == "Monte Carlo";
-        self.monte_carlo.store(monte_carlo, Ordering::Relaxed);
-        if !monte_carlo {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        *state = ProgressState { total, shown: None };
+        if let ProgressStyle::Search = self.style {
             eprintln!("  {phase}");
         }
     }
 
     fn advance(&self, done: u64) {
-        let total = self.total.load(Ordering::Relaxed);
-        let percent = done.min(total) * 100 / total;
-        // Redraw only when the whole-number percentage changes.
-        if self.shown.swap(percent, Ordering::Relaxed) != percent {
-            if self.monte_carlo.load(Ordering::Relaxed) {
-                eprint!("\rMonte Carlo: {percent}% ({done}/{total})");
-            } else {
-                eprint!("\r  Searching... {percent}%");
-            }
-            let _ = io::stderr().flush();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.total == 0 {
+            return;
+        }
+        let percent = done.min(state.total) * 100 / state.total;
+        if state.shown.is_none_or(|shown| percent > shown) {
+            state.shown = Some(percent);
+            self.draw(percent, done, state.total);
         }
     }
 
     fn finish(&self) {
-        if self.monte_carlo.load(Ordering::Relaxed) {
-            let total = self.total.load(Ordering::Relaxed);
-            eprintln!("\rMonte Carlo: 100% ({total}/{total})");
-        } else {
-            eprintln!();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.total > 0 && state.shown != Some(100) {
+            self.draw(100, state.total, state.total);
         }
+        eprintln!();
     }
 }
 
@@ -680,9 +729,6 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
     }
 
     let name = parts[0].to_string();
-    if name.is_empty() {
-        bail!("Custom engine name cannot be empty");
-    }
 
     let thrust_kn: f64 = parts[1].parse().map_err(|_| {
         anyhow::anyhow!(
@@ -692,9 +738,6 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if !positive(thrust_kn) {
-        bail!("Thrust must be positive for custom engine '{}'", name);
-    }
 
     let isp_s: f64 = parts[2].parse().map_err(|_| {
         anyhow::anyhow!(
@@ -704,9 +747,6 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if !positive(isp_s) {
-        bail!("ISP must be positive for custom engine '{}'", name);
-    }
 
     let mass_kg: f64 = parts[3].parse().map_err(|_| {
         anyhow::anyhow!(
@@ -716,9 +756,6 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
             name
         )
     })?;
-    if !positive(mass_kg) {
-        bail!("Mass must be positive for custom engine '{}'", name);
-    }
 
     let propellant = parse_propellant(parts[4]).map_err(|_| {
         anyhow::anyhow!(
@@ -789,4 +826,41 @@ pub fn completions(args: CompletionsArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn too_many_combinations_comes_with_advice() {
+        let message = explain(&OptimizeError::TooManyCombinations {
+            stage_count: 3,
+            combinations: 216_000,
+            limit: 200_000,
+        });
+        assert!(message.contains("--stage1-engine"), "{message}");
+        assert!(message.contains("--engine"), "{message}");
+    }
+
+    #[test]
+    fn problem_errors_name_their_flag() {
+        let message = explain_problem(&ProblemError::Constraint(
+            ConstraintError::InvalidLiftoffTwr(Ratio::new(0.5)),
+        ));
+        assert!(message.contains("--min-twr"), "{message}");
+        let message = explain_problem(&ProblemError::InvalidPayload(Mass::kg(f64::NAN)));
+        assert!(message.contains("--payload"), "{message}");
+    }
+
+    #[test]
+    fn progress_only_moves_forward_and_ignores_advance_before_start() {
+        let progress = StderrProgress::search();
+        progress.advance(5); // before start: no total, nothing to divide by
+        progress.start("test", 100);
+        progress.advance(60);
+        progress.advance(40); // a slower thread reporting late
+        let shown = progress.state.lock().unwrap().shown;
+        assert_eq!(shown, Some(60));
+    }
 }

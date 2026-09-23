@@ -43,7 +43,7 @@ The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin 
 ### Key Design Decisions
 - Newtype pattern for all physical units (compiler prevents adding kg to m/s)
 - Engine data embedded via `include_str!` for single-binary distribution
-- The library never prints and never panics on public input (`clippy::unwrap_used`/`expect_used` denied outside tests); crate-private unchecked constructors (`from_parts`) are used only where validity is guaranteed by construction
+- The library never prints, and invalid values are errors rather than panics (`clippy::unwrap_used`/`expect_used` denied outside tests). Stage-index methods on `Rocket` panic past the top like slice indexing, documented under `# Panics`; `Rocket::stage(i)` is the checked lookup. Crate-private unchecked constructors (`from_parts`) are used only where validity is guaranteed by construction
 - Every public struct in the optimizer module has private fields; errors and enums that may grow are `#[non_exhaustive]`
 - The library reports causes (`Infeasibility`); only the CLI mentions flags
 - No hidden margins: rockets are sized to hit the target exactly; margin is an explicit constraint
@@ -52,9 +52,9 @@ The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin 
 - Validation tests against real rockets, honest about where ideal theory stops (see the Saturn V test)
 - JSON output is versioned (`schema_version`); snapshot tests pin it
 
-### Test Suite (336 tests)
-- **179 library unit tests** and **8 binary unit tests** - Inline in source modules
-- **79 CLI tests** - End-to-end, including two JSON snapshots (`tests/cli.rs`, needs the `cli` feature)
+### Test Suite (343 tests)
+- **181 library unit tests** and **11 binary unit tests** - Inline in source modules
+- **81 CLI tests** - End-to-end, including two JSON snapshots (`tests/cli.rs`, needs the `cli` feature)
 - **16 property tests** - Invariants via proptest (`tests/properties.rs`)
 - **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
 - **36 doc tests** - Examples in rustdoc comments (none ignored)

@@ -160,8 +160,9 @@ let results = MonteCarloRunner::new(Uncertainty::default()).run_design(&solution
 println!("{:.1}% of builds reach orbit", results.success_probability() * 100.0);
 ```
 
-Everything serializes with serde: a `Solution` serializes to the same
-document as `tsi optimize --output json`. See [`examples/`](examples/) for
+Everything serializes with serde: a `Solution` serializes to the document
+`tsi optimize --output json` prints, versioned by `schema_version`, less the
+CLI's `design_margin_percent` (a property of the problem, not the solution). See [`examples/`](examples/) for
 more, starting with `cargo run --example falcon9`.
 
 ## Commands

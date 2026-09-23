@@ -2,7 +2,7 @@
 //!
 //! Hydrogen has the best Isp of any practical propellant: 450 s against
 //! kerosene's 310-350 s. So why isn't every stage hydrogen? Design the same
-//! rocket four ways and look past the delta-v.
+//! rocket three ways and look past the delta-v.
 //!
 //! ```sh
 //! cargo run --example hydrogen_upper_stage

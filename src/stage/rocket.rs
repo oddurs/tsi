@@ -128,7 +128,9 @@ impl Rocket {
     pub(crate) fn with_stages(&self, stages: Vec<Stage>) -> Self {
         Self {
             stages,
-            ..self.clone()
+            payload: self.payload,
+            booster_isp: self.booster_isp,
+            surface_gravity: self.surface_gravity,
         }
     }
 
@@ -174,6 +176,16 @@ impl Rocket {
         &self.stages
     }
 
+    /// One stage by index (0 = first stage), or `None` past the top.
+    ///
+    /// The per-stage methods below (`stage_delta_v`, `stage_twr`, ...) take
+    /// an index and panic past the top, as slice indexing does; check with
+    /// this or [`stage_count`](Self::stage_count) when the index comes from
+    /// outside.
+    pub fn stage(&self, stage_index: usize) -> Option<&Stage> {
+        self.stages.get(stage_index)
+    }
+
     /// Get the payload mass.
     pub fn payload(&self) -> Mass {
         self.payload
@@ -212,6 +224,10 @@ impl Rocket {
     ///
     /// Accounts for payload above this stage (upper stages + payload), and
     /// for the atmosphere the first stage flies through ([`Self::isp_model`]).
+    ///
+    /// # Panics
+    ///
+    /// If `stage_index` is not less than [`stage_count`](Self::stage_count).
     pub fn stage_delta_v(&self, stage_index: usize) -> Velocity {
         let stage = &self.stages[stage_index];
         let payload_above = self.mass_above_stage(stage_index);
@@ -225,7 +241,7 @@ impl Rocket {
         let mut mass = self.payload;
 
         // Add wet mass of all stages above this one
-        for i in (stage_index + 1)..self.stages.len() {
+        for i in stage_index.saturating_add(1)..self.stages.len() {
             mass = mass + self.stages[i].wet_mass();
         }
 
@@ -286,11 +302,19 @@ impl Rocket {
     /// * `stage_index` - Which stage (0 = first stage)
     ///
     /// Quoted against the rocket's own [`surface_gravity`](Self::surface_gravity).
+    ///
+    /// # Panics
+    ///
+    /// If `stage_index` is not less than [`stage_count`](Self::stage_count).
     pub fn stage_twr(&self, stage_index: usize) -> Ratio {
         self.stage_twr_in(stage_index, self.surface_gravity)
     }
 
     /// Vacuum TWR at ignition of a stage, under a given gravity (m/s²).
+    ///
+    /// # Panics
+    ///
+    /// If `stage_index` is not less than [`stage_count`](Self::stage_count).
     pub fn stage_twr_in(&self, stage_index: usize, gravity: f64) -> Ratio {
         let stage = &self.stages[stage_index];
         let total_mass = stage.wet_mass() + self.mass_above_stage(stage_index);
@@ -483,6 +507,15 @@ mod tests {
         // Should be several minutes total
         assert!(burn_time.as_seconds() > 100.0);
         assert!(burn_time.as_seconds() < 1000.0);
+    }
+
+    #[test]
+    fn stage_lookup_does_not_panic_past_the_top() {
+        let rocket = simple_two_stage();
+        assert!(rocket.stage(1).is_some());
+        assert!(rocket.stage(2).is_none());
+        // Past the top, nothing sits above: just the payload.
+        assert_eq!(rocket.mass_above_stage(usize::MAX), rocket.payload());
     }
 
     #[test]

@@ -287,8 +287,10 @@ Each entry of `stages`:
 | `design_total_mass_kg`, `design_stage_count` | number, integer | The design that was stressed |
 | `target_delta_v_mps`, `runtime_ms` | number | |
 
-Library users get the same document by serializing a `Solution` and
-`MonteCarloResults`, both of which implement `serde::Serialize`.
+Library users get the same document by serializing a `Solution` (which
+includes `schema_version`) and `MonteCarloResults`, both of which implement
+`serde::Serialize`. Only `design_margin_percent` is added by the CLI, since
+the margin belongs to the problem rather than the solution.
 
 ### Monte Carlo
 
