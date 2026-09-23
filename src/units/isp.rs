@@ -49,7 +49,8 @@ use std::ops::Mul;
 /// let improvement = merlin_vac.as_seconds() / merlin_sl.as_seconds();
 /// assert!((improvement - 1.10).abs() < 0.01);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Isp(f64);
 
 impl Isp {

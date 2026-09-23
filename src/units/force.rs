@@ -45,7 +45,8 @@ use super::fmt::format_thousands_f64;
 /// let super_heavy = raptor * 33u32;
 /// assert!(super_heavy.as_newtons() > 80_000_000.0); // ~80 MN
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Force(f64);
 
 impl Force {

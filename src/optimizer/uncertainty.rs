@@ -1,36 +1,18 @@
 //! Uncertainty modeling for Monte Carlo analysis.
 //!
 //! Real rocket parameters have manufacturing tolerances and measurement
-//! uncertainties. This module provides types to model these variations
-//! and sample perturbed parameters for Monte Carlo simulation.
+//! uncertainties. This module describes those variations and draws perturbed
+//! builds of a design from them.
 //!
 //! # Uncertainty Model
 //!
-//! Parameters are modeled with percentage uncertainties, assuming
-//! a normal (Gaussian) distribution. The uncertainty percentage
-//! represents a 1-sigma (68%) confidence interval.
+//! Parameters are modeled with percentage uncertainties, assuming a normal
+//! (Gaussian) distribution. The uncertainty percentage is one standard
+//! deviation, so an Isp uncertainty of ±2% means:
 //!
-//! For example, an ISP uncertainty of ±2% means:
-//! - 68% of samples fall within ±2% of nominal
-//! - 95% of samples fall within ±4% of nominal (2-sigma)
-//! - 99.7% of samples fall within ±6% of nominal (3-sigma)
-//!
-//! # Example
-//!
-//! ```
-//! use tsiolkovsky::optimizer::Uncertainty;
-//!
-//! // Typical uncertainties for a well-characterized engine
-//! let uncertainty = Uncertainty::default();
-//! assert!((uncertainty.isp_percent - 1.0).abs() < 0.01);
-//!
-//! // Custom uncertainty for early development
-//! let high_uncertainty = Uncertainty {
-//!     isp_percent: 3.0,
-//!     thrust_percent: 2.0,
-//!     structural_percent: 5.0,
-//! };
-//! ```
+//! - 68% of builds fall within ±2% of nominal
+//! - 95% within ±4% (2-sigma)
+//! - 99.7% within ±6% (3-sigma)
 //!
 //! # Physical Basis
 //!
@@ -49,40 +31,52 @@
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
-use crate::engine::Engine;
 use crate::stage::{Rocket, Stage};
-use crate::units::{Force, Isp, Mass, Ratio};
+
+/// Smallest multiplicative factor a perturbation may produce. A normal
+/// distribution has tails that reach zero and below; an engine can't have
+/// negative Isp, so draws are truncated here. With realistic uncertainties
+/// (a few percent) the truncation never happens.
+const MIN_FACTOR: f64 = 0.01;
 
 /// Uncertainty specification for Monte Carlo analysis.
 ///
-/// All values are expressed as percentages (1-sigma).
-/// A value of 2.0 means ±2% uncertainty at 1-sigma.
+/// Each value is a percentage, one standard deviation: 2.0 means ±2% at
+/// 1-sigma. Build one from a preset and adjust it by name, so that the three
+/// numbers can't be swapped by accident:
 ///
-/// # Default Values
+/// ```
+/// use tsiolkovsky::optimizer::Uncertainty;
 ///
-/// The defaults represent typical uncertainties for a
-/// well-characterized production engine:
+/// // Typical uncertainties for a well-characterized engine
+/// let production = Uncertainty::default();
+/// assert_eq!(production.isp_percent(), 1.0);
 ///
-/// - ISP: ±1% (combustion is well-understood)
-/// - Thrust: ±2% (chamber pressure varies)
-/// - Structural: ±5% (manufacturing tolerances)
-#[derive(Debug, Clone, Copy)]
+/// // An engine still in development
+/// let development = Uncertainty::default()
+///     .with_isp_percent(3.0)
+///     .with_structural_percent(10.0);
+/// assert_eq!(development.thrust_percent(), 2.0);
+/// ```
+///
+/// # Presets
+///
+/// | Preset | Isp | Thrust | Structure |
+/// |--------|-----|--------|-----------|
+/// | [`none`](Self::none) | 0% | 0% | 0% |
+/// | [`low`](Self::low) | 0.5% | 1% | 3% |
+/// | [`default`](Self::default) | 1% | 2% | 5% |
+/// | [`high`](Self::high) | 2% | 3% | 8% |
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Uncertainty {
-    /// ISP uncertainty as percentage (1-sigma)
-    pub isp_percent: f64,
-
-    /// Thrust uncertainty as percentage (1-sigma)
-    pub thrust_percent: f64,
-
-    /// Structural mass ratio uncertainty as percentage (1-sigma)
-    pub structural_percent: f64,
+    isp_percent: f64,
+    thrust_percent: f64,
+    structural_percent: f64,
 }
 
 impl Default for Uncertainty {
-    /// Default uncertainties for well-characterized engines.
-    ///
-    /// These values are conservative for production hardware.
-    /// Development engines may have higher uncertainties.
+    /// Uncertainties for well-characterized production hardware: Isp ±1%,
+    /// thrust ±2%, structural mass ±5%.
     fn default() -> Self {
         Self {
             isp_percent: 1.0,
@@ -92,33 +86,17 @@ impl Default for Uncertainty {
     }
 }
 
-impl Uncertainty {
-    /// Create custom uncertainty specification.
-    ///
-    /// All values are percentages (1-sigma).
-    ///
-    /// # Arguments
-    ///
-    /// * `isp_percent` - ISP uncertainty (typically 1-3%)
-    /// * `structural_percent` - Structural ratio uncertainty (typically 3-10%)
-    /// * `thrust_percent` - Thrust uncertainty (typically 1-3%)
-    ///
-    /// The argument order (isp, structural, thrust) does not match the field
-    /// order (isp, thrust, structural), and all three are plain `f64`s, so a
-    /// mix-up compiles silently. Use a struct literal instead.
-    #[deprecated(
-        since = "0.7.0",
-        note = "argument order differs from field order; use a struct literal"
-    )]
-    pub fn new(isp_percent: f64, structural_percent: f64, thrust_percent: f64) -> Self {
-        Self {
-            isp_percent,
-            structural_percent,
-            thrust_percent,
-        }
-    }
+/// An uncertainty that isn't a usable standard deviation.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum UncertaintyError {
+    /// A percentage is negative, infinite or not a number.
+    #[error("{parameter} uncertainty must be zero or a positive percentage, got {value}")]
+    InvalidPercent { parameter: &'static str, value: f64 },
+}
 
-    /// Create zero uncertainty (for deterministic analysis).
+impl Uncertainty {
+    /// No uncertainty: every build is the nominal design.
     pub fn none() -> Self {
         Self {
             isp_percent: 0.0,
@@ -127,327 +105,239 @@ impl Uncertainty {
         }
     }
 
-    /// Check if any uncertainty is specified.
+    /// Mature, flight-proven hardware: Isp ±0.5%, thrust ±1%, structure ±3%.
+    pub fn low() -> Self {
+        Self {
+            isp_percent: 0.5,
+            thrust_percent: 1.0,
+            structural_percent: 3.0,
+        }
+    }
+
+    /// Development hardware: Isp ±2%, thrust ±3%, structure ±8%.
+    pub fn high() -> Self {
+        Self {
+            isp_percent: 2.0,
+            thrust_percent: 3.0,
+            structural_percent: 8.0,
+        }
+    }
+
+    /// Set the Isp uncertainty (percent, 1-sigma).
+    pub fn with_isp_percent(mut self, percent: f64) -> Self {
+        self.isp_percent = percent;
+        self
+    }
+
+    /// Set the thrust uncertainty (percent, 1-sigma).
+    pub fn with_thrust_percent(mut self, percent: f64) -> Self {
+        self.thrust_percent = percent;
+        self
+    }
+
+    /// Set the structural mass uncertainty (percent, 1-sigma).
+    pub fn with_structural_percent(mut self, percent: f64) -> Self {
+        self.structural_percent = percent;
+        self
+    }
+
+    /// Isp uncertainty, percent 1-sigma.
+    pub fn isp_percent(&self) -> f64 {
+        self.isp_percent
+    }
+
+    /// Thrust uncertainty, percent 1-sigma.
+    pub fn thrust_percent(&self) -> f64 {
+        self.thrust_percent
+    }
+
+    /// Structural mass uncertainty, percent 1-sigma.
+    pub fn structural_percent(&self) -> f64 {
+        self.structural_percent
+    }
+
+    /// Check that every percentage is a usable standard deviation.
+    pub fn validate(&self) -> Result<(), UncertaintyError> {
+        for (parameter, value) in [
+            ("Isp", self.isp_percent),
+            ("thrust", self.thrust_percent),
+            ("structural", self.structural_percent),
+        ] {
+            if !(value.is_finite() && value >= 0.0) {
+                return Err(UncertaintyError::InvalidPercent { parameter, value });
+            }
+        }
+        Ok(())
+    }
+
+    /// Check if every uncertainty is zero.
     pub fn is_zero(&self) -> bool {
         self.isp_percent == 0.0 && self.thrust_percent == 0.0 && self.structural_percent == 0.0
     }
 }
 
-/// Samples perturbed parameter values based on uncertainty.
+/// Draws perturbed builds of a design.
 ///
-/// Uses normal distributions to generate random variations
-/// around nominal values. Thread-safe and can be used with
-/// rayon for parallel Monte Carlo.
-///
-/// # Example
-///
-/// ```
-/// use tsiolkovsky::optimizer::{Uncertainty, ParameterSampler};
-/// use tsiolkovsky::units::Isp;
-///
-/// let sampler = ParameterSampler::new(Uncertainty::default());
-/// let nominal_isp = Isp::seconds(350.0);
-///
-/// // Generate 1000 perturbed ISP values
-/// let samples: Vec<Isp> = (0..1000)
-///     .map(|_| sampler.perturb_isp(nominal_isp))
-///     .collect();
-///
-/// // Mean should be close to nominal
-/// let mean: f64 = samples.iter().map(|i| i.as_seconds()).sum::<f64>() / 1000.0;
-/// assert!((mean - 350.0).abs() < 5.0);
-/// ```
+/// Crate-private so that `rand`'s types stay out of the public API; the
+/// public face of this is [`MonteCarloRunner`](super::MonteCarloRunner).
 #[derive(Debug, Clone)]
-pub struct ParameterSampler {
+pub(crate) struct ParameterSampler {
     uncertainty: Uncertainty,
 }
 
 impl ParameterSampler {
-    /// Create a new sampler with the given uncertainty specification.
-    pub fn new(uncertainty: Uncertainty) -> Self {
+    /// A sampler for a validated uncertainty.
+    pub(crate) fn new(uncertainty: Uncertainty) -> Self {
         Self { uncertainty }
-    }
-
-    /// Perturb an ISP value based on uncertainty.
-    ///
-    /// Samples from a normal distribution centered on the nominal
-    /// value with standard deviation based on the ISP uncertainty.
-    pub fn perturb_isp(&self, nominal: Isp) -> Isp {
-        if self.uncertainty.isp_percent == 0.0 {
-            return nominal;
-        }
-        let factor = self.sample_factor(self.uncertainty.isp_percent);
-        Isp::seconds(nominal.as_seconds() * factor)
-    }
-
-    /// Perturb a thrust value based on uncertainty.
-    pub fn perturb_thrust(&self, nominal: Force) -> Force {
-        if self.uncertainty.thrust_percent == 0.0 {
-            return nominal;
-        }
-        let factor = self.sample_factor(self.uncertainty.thrust_percent);
-        Force::newtons(nominal.as_newtons() * factor)
-    }
-
-    /// Perturb a structural ratio based on uncertainty.
-    ///
-    /// The result is clamped to valid range (0.01 to 0.5).
-    pub fn perturb_structural_ratio(&self, nominal: Ratio) -> Ratio {
-        if self.uncertainty.structural_percent == 0.0 {
-            return nominal;
-        }
-        let factor = self.sample_factor(self.uncertainty.structural_percent);
-        let perturbed = nominal.as_f64() * factor;
-        // Clamp to reasonable range
-        Ratio::new(perturbed.clamp(0.01, 0.5))
-    }
-
-    /// Perturb a mass value based on a percentage uncertainty.
-    pub fn perturb_mass(&self, nominal: Mass, percent: f64) -> Mass {
-        if percent == 0.0 {
-            return nominal;
-        }
-        let factor = self.sample_factor(percent);
-        Mass::kg(nominal.as_kg() * factor)
-    }
-
-    /// Create a perturbed copy of an engine.
-    ///
-    /// Perturbs ISP and thrust values while keeping other
-    /// parameters (name, propellant, dry mass) unchanged.
-    ///
-    /// One Isp factor scales both sea-level and vacuum Isp, and one thrust
-    /// factor scales both thrusts. The errors are correlated because they
-    /// have the same causes (combustion efficiency, chamber pressure), and
-    /// perturbing them separately could give an engine that is better at sea
-    /// level than in vacuum.
-    pub fn perturb_engine(&self, engine: &Engine) -> Engine {
-        self.perturb_engine_with_rng(engine, &mut rand::thread_rng())
-    }
-
-    /// [`perturb_engine`](Self::perturb_engine) with a caller-supplied RNG.
-    pub fn perturb_engine_with_rng<R: Rng>(&self, engine: &Engine, rng: &mut R) -> Engine {
-        let isp = self.factor(self.uncertainty.isp_percent, rng);
-        let thrust = self.factor(self.uncertainty.thrust_percent, rng);
-        Engine::new(
-            engine.name.clone(),
-            engine.thrust_sl() * thrust,
-            engine.thrust_vac() * thrust,
-            Isp::seconds(engine.isp_sl().as_seconds() * isp),
-            Isp::seconds(engine.isp_vac().as_seconds() * isp),
-            engine.dry_mass(),
-            engine.propellant,
-        )
     }
 
     /// Build a rocket again with as-built errors.
     ///
-    /// Each stage gets its own engine factors (see
-    /// [`perturb_engine`](Self::perturb_engine)) and a factor on its structural
-    /// mass. Propellant loads, engine counts and payload are unchanged: this
-    /// is the same design, built imperfectly.
-    pub fn perturb_rocket<R: Rng>(&self, rocket: &Rocket, rng: &mut R) -> Rocket {
+    /// Each stage gets one Isp factor (scaling sea-level and vacuum Isp
+    /// together: the errors share causes, and perturbing them separately could
+    /// make an engine better at sea level than in vacuum), one thrust factor
+    /// likewise, and one factor on its structural mass. Propellant loads,
+    /// engine counts and payload are unchanged: this is the same design,
+    /// built imperfectly.
+    pub(crate) fn perturb_rocket<R: Rng>(&self, rocket: &Rocket, rng: &mut R) -> Rocket {
         let stages = rocket
             .stages()
             .iter()
             .map(|stage| {
-                let engine = self.perturb_engine_with_rng(stage.engine(), rng);
+                let isp = self.factor(self.uncertainty.isp_percent, rng);
+                let thrust = self.factor(self.uncertainty.thrust_percent, rng);
                 let structure = self.factor(self.uncertainty.structural_percent, rng);
-                Stage::new(
-                    engine,
+                Stage::from_parts(
+                    stage.engine().scaled(isp, thrust),
                     stage.engine_count(),
                     stage.propellant_mass(),
                     stage.structural_mass() * structure,
                 )
             })
             .collect();
-        Rocket::new(stages, rocket.payload())
-            .with_booster_isp(rocket.booster_isp())
-            .with_surface_gravity(rocket.surface_gravity())
+        rocket.with_stages(stages)
     }
 
-    /// Draw a multiplicative factor N(1, percent/100), or exactly 1 for zero.
+    /// Draw a multiplicative factor N(1, percent/100), truncated below at
+    /// [`MIN_FACTOR`], or exactly 1 for zero uncertainty.
     fn factor<R: Rng>(&self, percent: f64, rng: &mut R) -> f64 {
         if percent == 0.0 {
-            1.0
-        } else {
-            self.sample_factor_with_rng(percent, rng)
+            return 1.0;
         }
-    }
-
-    /// Sample a multiplicative factor from normal distribution.
-    ///
-    /// Returns a value centered on 1.0 with standard deviation
-    /// equal to percent/100. For example, 2% uncertainty gives
-    /// a normal distribution N(1.0, 0.02).
-    fn sample_factor(&self, percent: f64) -> f64 {
-        let mut rng = rand::thread_rng();
-        let sigma = percent / 100.0;
-        let normal = Normal::new(1.0, sigma).expect("invalid distribution parameters");
-        normal.sample(&mut rng)
-    }
-
-    /// Sample a factor using a provided RNG (for reproducibility).
-    pub fn sample_factor_with_rng<R: Rng>(&self, percent: f64, rng: &mut R) -> f64 {
-        let sigma = percent / 100.0;
-        let normal = Normal::new(1.0, sigma).expect("invalid distribution parameters");
-        normal.sample(rng)
-    }
-
-    /// Get the underlying uncertainty specification.
-    pub fn uncertainty(&self) -> &Uncertainty {
-        &self.uncertainty
+        // A validated uncertainty always makes a valid distribution; if one
+        // slips through, no perturbation is safer than a panic.
+        Normal::new(1.0, percent / 100.0).map_or(1.0, |n| n.sample(rng).max(MIN_FACTOR))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::EngineDatabase;
+    use crate::units::Mass;
+    use proptest::prelude::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
-    #[test]
-    fn uncertainty_default() {
-        let u = Uncertainty::default();
-        assert!((u.isp_percent - 1.0).abs() < 0.001);
-        assert!((u.thrust_percent - 2.0).abs() < 0.001);
-        assert!((u.structural_percent - 5.0).abs() < 0.001);
+    fn rocket() -> Rocket {
+        let db = EngineDatabase::default();
+        let raptor = db.get("raptor-2").unwrap().clone();
+        Rocket::new(
+            vec![
+                Stage::with_structural_ratio(raptor.clone(), 2, Mass::kg(150_000.0), 0.08).unwrap(),
+                Stage::with_structural_ratio(raptor, 1, Mass::kg(30_000.0), 0.08).unwrap(),
+            ],
+            Mass::kg(5_000.0),
+        )
+        .unwrap()
     }
 
     #[test]
-    fn uncertainty_none() {
-        let u = Uncertainty::none();
-        assert!(u.is_zero());
+    fn presets() {
+        assert!(Uncertainty::none().is_zero());
+        assert_eq!(Uncertainty::low().structural_percent(), 3.0);
+        assert_eq!(Uncertainty::default().thrust_percent(), 2.0);
+        assert_eq!(Uncertainty::high().isp_percent(), 2.0);
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn uncertainty_custom() {
-        let u = Uncertainty::new(2.0, 8.0, 3.0);
-        assert!((u.isp_percent - 2.0).abs() < 0.001);
-        assert!((u.structural_percent - 8.0).abs() < 0.001);
-        assert!((u.thrust_percent - 3.0).abs() < 0.001);
+    fn named_setters_change_only_their_field() {
+        let u = Uncertainty::default().with_structural_percent(8.0);
+        assert_eq!(u.isp_percent(), 1.0);
+        assert_eq!(u.thrust_percent(), 2.0);
+        assert_eq!(u.structural_percent(), 8.0);
     }
 
     #[test]
-    fn sampler_perturb_isp() {
+    fn validation_rejects_negative_and_nan() {
+        assert!(Uncertainty::default().validate().is_ok());
+        assert!(Uncertainty::default()
+            .with_isp_percent(-1.0)
+            .validate()
+            .is_err());
+        assert!(Uncertainty::default()
+            .with_thrust_percent(f64::NAN)
+            .validate()
+            .is_err());
+    }
+
+    #[test]
+    fn isp_factor_has_the_right_spread() {
         let sampler = ParameterSampler::new(Uncertainty::default());
-        let nominal = Isp::seconds(350.0);
-
-        // Generate many samples
-        let samples: Vec<f64> = (0..10000)
-            .map(|_| sampler.perturb_isp(nominal).as_seconds())
-            .collect();
-
-        // Mean should be close to nominal
-        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
-        assert!(
-            (mean - 350.0).abs() < 1.0,
-            "mean {} too far from nominal 350",
-            mean
-        );
-
-        // Standard deviation should be close to 1% of nominal
-        let variance: f64 =
+        let mut rng = StdRng::seed_from_u64(1);
+        let samples: Vec<f64> = (0..20_000).map(|_| sampler.factor(1.0, &mut rng)).collect();
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let var =
             samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
-        let std_dev = variance.sqrt();
-        let expected_std = 350.0 * 0.01; // 1% of nominal
-        assert!(
-            (std_dev - expected_std).abs() < 1.0,
-            "std_dev {} too far from expected {}",
-            std_dev,
-            expected_std
-        );
+        assert!((mean - 1.0).abs() < 0.001, "mean {mean}");
+        assert!((var.sqrt() - 0.01).abs() < 0.0005, "std {}", var.sqrt());
     }
 
     #[test]
-    fn sampler_perturb_thrust() {
-        let sampler = ParameterSampler::new(Uncertainty::default());
-        let nominal = Force::newtons(2_000_000.0);
-
-        // Generate many samples
-        let samples: Vec<f64> = (0..10000)
-            .map(|_| sampler.perturb_thrust(nominal).as_newtons())
-            .collect();
-
-        // Mean should be close to nominal
-        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
-        assert!(
-            (mean - 2_000_000.0).abs() < 10_000.0,
-            "mean {} too far from nominal",
-            mean
-        );
-    }
-
-    #[test]
-    fn sampler_perturb_structural_ratio() {
-        let sampler = ParameterSampler::new(Uncertainty::default());
-        let nominal = Ratio::new(0.08);
-
-        // Generate many samples
-        let samples: Vec<f64> = (0..10000)
-            .map(|_| sampler.perturb_structural_ratio(nominal).as_f64())
-            .collect();
-
-        // Mean should be close to nominal
-        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
-        assert!(
-            (mean - 0.08).abs() < 0.005,
-            "mean {} too far from nominal 0.08",
-            mean
-        );
-
-        // All values should be clamped to valid range
-        assert!(samples.iter().all(|x| (0.01..=0.5).contains(x)));
-    }
-
-    #[test]
-    fn sampler_zero_uncertainty_returns_nominal() {
+    fn zero_uncertainty_builds_the_nominal_rocket() {
         let sampler = ParameterSampler::new(Uncertainty::none());
-        let nominal_isp = Isp::seconds(350.0);
-        let nominal_thrust = Force::newtons(2_000_000.0);
-        let nominal_ratio = Ratio::new(0.08);
-
-        // With zero uncertainty, should return exactly nominal
-        assert_eq!(
-            sampler.perturb_isp(nominal_isp).as_seconds(),
-            nominal_isp.as_seconds()
-        );
-        assert_eq!(
-            sampler.perturb_thrust(nominal_thrust).as_newtons(),
-            nominal_thrust.as_newtons()
-        );
-        assert_eq!(
-            sampler.perturb_structural_ratio(nominal_ratio).as_f64(),
-            nominal_ratio.as_f64()
-        );
+        let nominal = rocket();
+        let built = sampler.perturb_rocket(&nominal, &mut StdRng::seed_from_u64(1));
+        assert_eq!(built.total_mass(), nominal.total_mass());
+        assert_eq!(built.total_delta_v(), nominal.total_delta_v());
     }
 
     #[test]
-    fn sampler_perturb_engine() {
-        let sampler = ParameterSampler::new(Uncertainty::default());
+    fn perturbation_keeps_the_design() {
+        let sampler = ParameterSampler::new(Uncertainty::high());
+        let nominal = rocket();
+        let built = sampler.perturb_rocket(&nominal, &mut StdRng::seed_from_u64(2));
+        for (a, b) in built.stages().iter().zip(nominal.stages()) {
+            assert_eq!(a.engine_count(), b.engine_count());
+            assert_eq!(a.propellant_mass(), b.propellant_mass());
+            assert_eq!(a.engine().name(), b.engine().name());
+        }
+        assert_eq!(built.payload(), nominal.payload());
+        assert_eq!(built.booster_isp(), nominal.booster_isp());
+        assert_eq!(built.surface_gravity(), nominal.surface_gravity());
+    }
 
-        // Create a mock engine using the constructor
-        use crate::engine::{Engine, Propellant};
-        let engine = Engine::new(
-            "Test",
-            Force::newtons(1_000_000.0),
-            Force::newtons(1_100_000.0),
-            Isp::seconds(300.0),
-            Isp::seconds(350.0),
-            Mass::kg(1000.0),
-            Propellant::LoxCh4,
-        );
-
-        let perturbed = sampler.perturb_engine(&engine);
-
-        // Name and propellant should be unchanged
-        assert_eq!(perturbed.name, engine.name);
-        assert_eq!(perturbed.propellant, engine.propellant);
-        assert_eq!(perturbed.dry_mass().as_kg(), engine.dry_mass().as_kg());
-
-        // Sea-level and vacuum values move together
-        let isp_ratio = perturbed.isp_sl().as_seconds() / perturbed.isp_vac().as_seconds();
-        assert!((isp_ratio - 300.0 / 350.0).abs() < 1e-12);
-        let thrust_ratio = perturbed.thrust_sl().as_newtons() / perturbed.thrust_vac().as_newtons();
-        assert!((thrust_ratio - 1.0 / 1.1).abs() < 1e-12);
+    proptest! {
+        /// A perturbed engine is never better at sea level than in vacuum,
+        /// and never has a negative Isp, however wide the uncertainty.
+        #[test]
+        fn perturbed_engines_stay_physical(
+            isp_percent in 0.0..200.0_f64,
+            thrust_percent in 0.0..200.0_f64,
+            seed in any::<u64>(),
+        ) {
+            let sampler = ParameterSampler::new(
+                Uncertainty::none()
+                    .with_isp_percent(isp_percent)
+                    .with_thrust_percent(thrust_percent),
+            );
+            let built = sampler.perturb_rocket(&rocket(), &mut StdRng::seed_from_u64(seed));
+            for stage in built.stages() {
+                let e = stage.engine();
+                prop_assert!(e.isp_sl().as_seconds() <= e.isp_vac().as_seconds());
+                prop_assert!(e.thrust_sl().as_newtons() <= e.thrust_vac().as_newtons());
+                prop_assert!(e.isp_sl().as_seconds() > 0.0);
+            }
+        }
     }
 }

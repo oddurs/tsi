@@ -199,9 +199,11 @@ pub struct OptimizeArgs {
     #[arg(long, default_value = "9")]
     pub max_engines: u32,
 
-    /// Structural mass ratio (structural / propellant)
-    #[arg(long, default_value = "0.08")]
-    pub structural_ratio: f64,
+    /// Structural ratio: structural mass (engines excluded) / propellant.
+    /// One value for every stage, or a list first stage first, e.g. 0.04,0.06
+    /// (the last value repeats for any stages beyond it)
+    #[arg(long, default_value = "0.08", value_parser = parse_ratio_list)]
+    pub structural_ratio: RatioList,
 
     /// Extra delta-v to design for, in percent of the target (e.g. 2 or 2%)
     #[arg(long, default_value = "0", value_parser = parse_percent)]
@@ -310,12 +312,34 @@ impl Gravity {
     ///
     /// Mars's surface pressure is under 1% of Earth's and the Moon has none,
     /// so a first stage there performs as if in vacuum.
-    pub fn booster_isp(&self) -> crate::physics::IspModel {
+    pub fn booster_isp(&self) -> tsiolkovsky::physics::IspModel {
         match self {
-            Gravity::Earth => crate::physics::IspModel::AscentAveraged,
-            Gravity::Mars | Gravity::Moon => crate::physics::IspModel::Vacuum,
+            Gravity::Earth => tsiolkovsky::physics::IspModel::AscentAveraged,
+            Gravity::Mars | Gravity::Moon => tsiolkovsky::physics::IspModel::Vacuum,
         }
     }
+}
+
+/// One or more ratios, first stage first.
+#[derive(Clone, Debug)]
+pub struct RatioList(pub Vec<f64>);
+
+impl RatioList {
+    pub fn iter(&self) -> impl Iterator<Item = &f64> {
+        self.0.iter()
+    }
+}
+
+/// Parse `0.08` or `0.04,0.06,0.11` into a list of ratios.
+fn parse_ratio_list(s: &str) -> Result<RatioList, String> {
+    s.split(',')
+        .map(|part| {
+            part.trim().parse::<f64>().map_err(|_| {
+                format!("expected a ratio such as 0.08, or a list like 0.04,0.06; got '{s}'")
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(RatioList)
 }
 
 /// Parse a percentage such as `2`, `2.5` or `2%` into a fraction (0.02).

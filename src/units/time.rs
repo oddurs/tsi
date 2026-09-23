@@ -2,7 +2,8 @@ use std::fmt;
 use std::ops::{Add, Mul, Sub};
 
 /// Time duration in seconds.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Time(f64);
 
 impl Time {

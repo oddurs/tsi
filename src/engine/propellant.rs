@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 ///   (~350s), doesn't coke like kerosene, easier to handle than hydrogen.
 ///   Used in Raptor, BE-4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Propellant {
     /// LOX/RP-1 (kerosene) - The workhorse propellant
     ///
@@ -164,11 +165,16 @@ mod tests {
 
     #[test]
     fn propellant_serialization() {
-        let p = Propellant::LoxCh4;
-        let json = serde_json::to_string(&p).unwrap();
-        assert_eq!(json, "\"LoxCh4\"");
-
-        let parsed: Propellant = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed, p);
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct Wrapper {
+            p: Propellant,
+        }
+        let text = toml::to_string(&Wrapper {
+            p: Propellant::LoxCh4,
+        })
+        .unwrap();
+        assert_eq!(text.trim(), "p = \"LoxCh4\"");
+        let parsed: Wrapper = toml::from_str(&text).unwrap();
+        assert_eq!(parsed.p, Propellant::LoxCh4);
     }
 }

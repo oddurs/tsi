@@ -89,7 +89,9 @@ pub const ASCENT_MEAN_PRESSURE_RATIO: f64 = 0.2;
 /// assert_eq!(vac, 311.0);
 /// assert!((ascent - 305.2).abs() < 0.1);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
 pub enum IspModel {
     /// Vacuum Isp for the whole burn. Right for upper stages, and for first
     /// stages on airless bodies such as the Moon (or nearly airless ones such

@@ -25,7 +25,7 @@
 //!        \/
 //! ```
 
-use crate::stage::Rocket;
+use tsiolkovsky::stage::Rocket;
 
 /// Width of the rocket body in characters (interior).
 const ROCKET_WIDTH: usize = 12;
@@ -82,7 +82,7 @@ pub fn generate_rocket_diagram(rocket: &Rocket, payload_kg: f64) -> Vec<String> 
     for (i, stage) in stages.iter().enumerate().rev() {
         let stage_num = i + 1;
         let height = stage_heights[i];
-        let engine_name = &stage.engine().name;
+        let engine_name = stage.engine().name();
         let engine_count = stage.engine_count();
         let propellant_kg = stage.propellant_mass().as_kg();
 
@@ -212,9 +212,9 @@ pub fn print_rocket_diagram(rocket: &Rocket, payload_kg: f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{Engine, EngineDatabase, Propellant};
-    use crate::stage::{Rocket, Stage};
-    use crate::units::{Force, Isp, Mass};
+    use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
+    use tsiolkovsky::stage::{Rocket, Stage};
+    use tsiolkovsky::units::{Force, Isp, Mass};
 
     fn make_test_rocket() -> Rocket {
         let engine = Engine::new(
@@ -225,13 +225,15 @@ mod tests {
             Isp::seconds(350.0),
             Mass::kg(1000.0),
             Propellant::LoxCh4,
-        );
+        )
+        .unwrap();
 
-        let stage1 = Stage::new(engine.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0));
-        let stage2 = Stage::new(engine, 1, Mass::kg(100_000.0), Mass::kg(5_000.0));
+        let stage1 =
+            Stage::new(engine.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0)).unwrap();
+        let stage2 = Stage::new(engine, 1, Mass::kg(100_000.0), Mass::kg(5_000.0)).unwrap();
         let payload = Mass::kg(5_000.0);
 
-        Rocket::new(vec![stage1, stage2], payload)
+        Rocket::new(vec![stage1, stage2], payload).unwrap()
     }
 
     #[test]
@@ -266,9 +268,10 @@ mod tests {
         let db = EngineDatabase::load_embedded().expect("load database");
         let raptor = db.get("raptor-2").expect("get raptor");
 
-        let stage1 = Stage::new(raptor.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0));
-        let stage2 = Stage::new(raptor.clone(), 1, Mass::kg(100_000.0), Mass::kg(5_000.0));
-        let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(5_000.0));
+        let stage1 =
+            Stage::new(raptor.clone(), 3, Mass::kg(400_000.0), Mass::kg(20_000.0)).unwrap();
+        let stage2 = Stage::new(raptor.clone(), 1, Mass::kg(100_000.0), Mass::kg(5_000.0)).unwrap();
+        let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(5_000.0)).unwrap();
 
         let diagram = generate_rocket_diagram(&rocket, 5000.0).join("\n");
 
@@ -293,10 +296,11 @@ mod tests {
             Isp::seconds(350.0),
             Mass::kg(1000.0),
             Propellant::LoxCh4,
-        );
+        )
+        .unwrap();
 
-        let stage = Stage::new(engine, 1, Mass::kg(50_000.0), Mass::kg(3_000.0));
-        let rocket = Rocket::new(vec![stage], Mass::kg(1_000.0));
+        let stage = Stage::new(engine, 1, Mass::kg(50_000.0), Mass::kg(3_000.0)).unwrap();
+        let rocket = Rocket::new(vec![stage], Mass::kg(1_000.0)).unwrap();
 
         let lines = generate_rocket_diagram(&rocket, 1000.0);
         assert!(!lines.is_empty());

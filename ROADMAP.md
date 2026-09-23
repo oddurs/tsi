@@ -65,11 +65,16 @@ The engine lights on the test stand before anything is stacked on it.
 
 ## v0.8 — Stacking
 
-`··········` 0% · 0 of 12 done · due 2026-10-27
+`#·········` 8% · 1 of 12 done · due 2026-10-27
 
 The vehicle is assembled: a library that can be depended on.
 
 ### backlog
+
+- [ ] [`0033`](https://github.com/oddurs/tsi/blob/main/cairn/items/0033-runnable-examples-that-narrate-real-rockets.md) Runnable examples/ that narrate real rockets <sup>docs · p1 · m · docs</sup>
+- [ ] [`0034`](https://github.com/oddurs/tsi/blob/main/cairn/items/0034-real-criterion-benchmarks-for-the-optimizers.md) Real criterion benchmarks for the optimizers <sup>chore · p2 · s · infra</sup>
+
+### in progress
 
 - [ ] [`0024`](https://github.com/oddurs/tsi/blob/main/cairn/items/0024-feature-gate-the-cli-so-the-library-carries-no-clap.md) Feature-gate the CLI so the library carries no clap <sup>feature · p0 · l · cli</sup>
 - [ ] [`0025`](https://github.com/oddurs/tsi/blob/main/cairn/items/0025-the-library-never-prints-progress-through-an-observer.md) The library never prints: progress through an observer <sup>feature · p0 · m · optimizer</sup>
@@ -80,12 +85,10 @@ The vehicle is assembled: a library that can be depended on.
 - [ ] [`0030`](https://github.com/oddurs/tsi/blob/main/cairn/items/0030-per-stage-structural-ratio-with-the-textbook-definition.md) Per-stage structural ratio, with the textbook definition <sup>feature · p1 · m · stage</sup>
 - [ ] [`0031`](https://github.com/oddurs/tsi/blob/main/cairn/items/0031-serde-support-on-public-types-json-output-with-a-schema-version.md) Serde support on public types; JSON output with a schema version <sup>feature · p1 · m · output</sup>
 - [ ] [`0032`](https://github.com/oddurs/tsi/blob/main/cairn/items/0032-loss-models-use-velocity-share-g0-and-cover-every-stage.md) Loss models use Velocity, share G0, and cover every stage <sup>chore · p2 · s · physics</sup>
-- [ ] [`0033`](https://github.com/oddurs/tsi/blob/main/cairn/items/0033-runnable-examples-that-narrate-real-rockets.md) Runnable examples/ that narrate real rockets <sup>docs · p1 · m · docs</sup>
-- [ ] [`0034`](https://github.com/oddurs/tsi/blob/main/cairn/items/0034-real-criterion-benchmarks-for-the-optimizers.md) Real criterion benchmarks for the optimizers <sup>chore · p2 · s · infra</sup>
 
-### in progress
+### done
 
-- [ ] [`0023`](https://github.com/oddurs/tsi/blob/main/cairn/items/0023-rename-the-crate-to-tsiolkovsky-keep-the-binary-as-tsi.md) Rename the crate to tsiolkovsky; keep the binary as tsi <sup>chore · p0 · s · infra</sup>
+- [x] [`0023`](https://github.com/oddurs/tsi/blob/main/cairn/items/0023-rename-the-crate-to-tsiolkovsky-keep-the-binary-as-tsi.md) Rename the crate to tsiolkovsky; keep the binary as tsi <sup>chore · p0 · s · infra</sup>
 
 ## v0.9 — Wet dress
 

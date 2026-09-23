@@ -40,7 +40,8 @@ use super::fmt::format_thousands_f64;
 /// let total = stage1_dv + stage2_dv;
 /// assert!(total.as_mps() > 19_000.0);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Velocity(f64);
 
 impl Velocity {

@@ -2,12 +2,14 @@
 id: 29
 title: Builder API and semver-safe public types
 type: feature
-status: backlog
+status: doing
 milestone: v0.8
+assignee: Oddur Sigurdsson
+claimed: 2026-09-23
 depends_on:
 - 26
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 priority: p0
 effort: l
 area: optimizer

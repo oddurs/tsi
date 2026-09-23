@@ -2,10 +2,12 @@
 id: 32
 title: Loss models use Velocity, share G0, and cover every stage
 type: chore
-status: backlog
+status: doing
 milestone: v0.8
+assignee: Oddur Sigurdsson
+claimed: 2026-09-23
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 priority: p2
 effort: s
 area: physics

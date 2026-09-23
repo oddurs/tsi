@@ -34,6 +34,6 @@ mod database;
 mod engine;
 mod propellant;
 
-pub use database::EngineDatabase;
-pub use engine::Engine;
+pub use database::{DatabaseError, EngineDatabase};
+pub use engine::{Engine, EngineError};
 pub use propellant::Propellant;

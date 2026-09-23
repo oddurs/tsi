@@ -2,7 +2,8 @@ use std::fmt;
 use std::ops::{Div, Mul};
 
 /// Dimensionless ratio (e.g., mass ratio, TWR).
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Ratio(f64);
 
 impl Ratio {
@@ -12,6 +13,12 @@ impl Ratio {
 
     pub fn as_f64(&self) -> f64 {
         self.0
+    }
+}
+
+impl From<f64> for Ratio {
+    fn from(value: f64) -> Self {
+        Ratio(value)
     }
 }
 

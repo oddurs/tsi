@@ -2,10 +2,12 @@
 id: 27
 title: Remove panics reachable from public input
 type: feature
-status: backlog
+status: doing
 milestone: v0.8
+assignee: Oddur Sigurdsson
+claimed: 2026-09-23
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 priority: p0
 effort: m
 area: stage

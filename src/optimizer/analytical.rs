@@ -6,12 +6,9 @@ use std::time::Instant;
 
 use rayon::prelude::*;
 
-use crate::stage::{Rocket, Stage};
-use crate::units::Mass;
-
-use super::sizing::{infeasible, size_for_delta_v, Failure, SizedStage, StageEngine};
+use super::sizing::{assemble, infeasibility, Failure, SizedStage, StageEngine};
 use super::solution::DELTA_V_TOLERANCE_MPS;
-use super::{OptimizeError, Optimizer, Problem, Solution};
+use super::{OptimizeError, Optimizer, OptimizerKind, Problem, Solution};
 
 /// Largest number of engine-to-stage assignments searched per stage count.
 const MAX_ASSIGNMENTS: usize = 200_000;
@@ -100,24 +97,22 @@ const MAX_SWEEPS: usize = 40;
 /// # Example
 ///
 /// ```
-/// use tsiolkovsky::optimizer::{AnalyticalOptimizer, Problem, Constraints, Optimizer};
-/// use tsiolkovsky::engine::EngineDatabase;
-/// use tsiolkovsky::units::{Mass, Velocity};
+/// use tsiolkovsky::prelude::*;
 ///
-/// let db = EngineDatabase::load_embedded().expect("failed to load database");
-/// let raptor = db.get("raptor-2").expect("engine not found");
+/// let db = EngineDatabase::builtin();
+/// let problem = Problem::builder()
+///     .payload(Mass::tonnes(5.0))
+///     .target(Velocity::mps(9_400.0))
+///     .engines([db.get("merlin-1d").unwrap().clone(), db.get("rl-10c").unwrap().clone()])
+///     .build()?;
 ///
-/// let problem = Problem::new(
-///     Mass::kg(5_000.0),
-///     Velocity::mps(9_400.0),
-///     vec![raptor.clone()],
-///     Constraints::default(),
-/// ).with_stage_count(2);
+/// let solution = AnalyticalOptimizer.optimize(&problem)?;
 ///
-/// let optimizer = AnalyticalOptimizer;
-/// let solution = optimizer.optimize(&problem).expect("optimization failed");
-///
-/// assert!(solution.meets_target());
+/// // Kerosene below, hydrogen above: nobody told it that.
+/// let stages = solution.rocket().stages();
+/// assert_eq!(stages[0].engine().name(), "Merlin-1D");
+/// assert_eq!(stages.last().unwrap().engine().name(), "RL-10C");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AnalyticalOptimizer;
@@ -133,9 +128,6 @@ struct Design<'a> {
 struct Sizer<'a, 'p> {
     stages: &'a [StageEngine<'p>],
     payload: f64,
-    tankage: f64,
-    gravity: f64,
-    max_engines: u32,
     /// Least delta-v stage 0 must deliver
     booster_floor: f64,
 }
@@ -152,14 +144,7 @@ impl Sizer<'_, '_> {
             if sized.len() + 1 == split.len() && dv < self.booster_floor {
                 return Err(Failure::BoosterTooSmall);
             }
-            let s = size_for_delta_v(
-                stage,
-                dv,
-                mass_above,
-                self.tankage,
-                self.gravity,
-                self.max_engines,
-            )?;
+            let s = stage.size_for_delta_v(dv, mass_above)?;
             mass_above = s.stack_mass;
             sized.push(s);
         }
@@ -176,21 +161,19 @@ impl Sizer<'_, '_> {
 /// for the delta-v split. Returns `None` if the target is beyond the
 /// structural limit of these stages.
 ///
-/// `epsilon` is the textbook structural coefficient, dry / (dry + propellant).
-fn lagrange_split(exhaust_velocities: &[f64], epsilon: f64, delta_v: f64) -> Option<Vec<f64>> {
+/// `epsilons` are each stage's textbook structural coefficient,
+/// dry / (dry + propellant).
+fn lagrange_split(exhaust_velocities: &[f64], epsilons: &[f64], delta_v: f64) -> Option<Vec<f64>> {
+    let stages = || exhaust_velocities.iter().zip(epsilons);
     // Σ cᵢ ln Rᵢ as a function of the multiplier η
     let achieved = |eta: f64| -> f64 {
-        exhaust_velocities
-            .iter()
-            .map(|&c| c * ((c * eta - 1.0) / (c * epsilon * eta)).ln())
+        stages()
+            .map(|(&c, &eps)| c * ((c * eta - 1.0) / (c * eps * eta)).ln())
             .sum()
     };
 
-    // As η → ∞, Rᵢ → 1/ε: the most any stage can do with tanks that heavy.
-    let ceiling: f64 = exhaust_velocities
-        .iter()
-        .map(|&c| c * (1.0 / epsilon).ln())
-        .sum();
+    // As η → ∞, Rᵢ → 1/εᵢ: the most any stage can do with tanks that heavy.
+    let ceiling: f64 = stages().map(|(&c, &eps)| c * (1.0 / eps).ln()).sum();
     if delta_v.is_nan() || delta_v >= ceiling {
         return None;
     }
@@ -215,9 +198,8 @@ fn lagrange_split(exhaust_velocities: &[f64], epsilon: f64, delta_v: f64) -> Opt
     }
     let eta = 0.5 * (lo + hi);
 
-    let split: Vec<f64> = exhaust_velocities
-        .iter()
-        .map(|&c| c * ((c * eta - 1.0) / (c * epsilon * eta)).ln())
+    let split: Vec<f64> = stages()
+        .map(|(&c, &eps)| c * ((c * eta - 1.0) / (c * eps * eta)).ln())
         .collect();
 
     // A stage whose exhaust is too slow to pull its weight gets a negative
@@ -236,16 +218,14 @@ fn optimize_assignment<'p>(
     stages: Vec<StageEngine<'p>>,
     problem: &Problem,
 ) -> (Result<Design<'p>, Failure>, u64) {
-    let constraints = &problem.constraints;
-    let tankage = constraints.structural_ratio.as_f64();
     let design_dv = problem.design_delta_v().as_mps();
     let sizer = Sizer {
         stages: &stages,
-        payload: problem.payload.as_kg(),
-        tankage,
-        gravity: constraints.surface_gravity,
-        max_engines: constraints.max_engines_per_stage,
-        booster_floor: constraints.booster_delta_v_floor(stages.len()).as_mps(),
+        payload: problem.payload().as_kg(),
+        booster_floor: problem
+            .constraints()
+            .booster_delta_v_floor(stages.len())
+            .as_mps(),
     };
     let n = stages.len();
     let mut evaluations = 0u64;
@@ -257,15 +237,19 @@ fn optimize_assignment<'p>(
     // No split can beat the structural ceiling: every stage at the largest
     // mass ratio its tanks allow, 1 + 1/ε, carrying nothing. Checking it
     // first gives a precise diagnosis instead of whatever the search tripped on.
-    let exhaust: Vec<f64> = stages.iter().map(|s| s.exhaust_velocity).collect();
-    let ceiling: f64 = exhaust.iter().map(|c| c * (1.0 + 1.0 / tankage).ln()).sum();
+    let ceiling: f64 = stages.iter().map(StageEngine::structural_ceiling).sum();
     if design_dv >= ceiling {
         return (Err(Failure::StructuralLimit), 0);
     }
 
     // Starting point: the classical solution, which ignores engine mass.
-    let epsilon = tankage / (1.0 + tankage);
-    let mut split = lagrange_split(&exhaust, epsilon, design_dv)
+    // Tankage ratio r (structure / propellant) as a textbook ε: r / (1 + r).
+    let exhaust: Vec<f64> = stages.iter().map(|s| s.exhaust_velocity).collect();
+    let epsilons: Vec<f64> = stages
+        .iter()
+        .map(|s| s.tankage / (1.0 + s.tankage))
+        .collect();
+    let mut split = lagrange_split(&exhaust, &epsilons, design_dv)
         .unwrap_or_else(|| vec![design_dv / n as f64; n]);
     // If the classical split leaves the first stage below its floor, start
     // from the floor instead, taking the difference evenly from the others.
@@ -361,9 +345,10 @@ fn optimize_assignment<'p>(
             evaluations,
         );
     }
-    let sized = sizer
-        .size(&split)
-        .expect("the best split was sized successfully above");
+    let sized = match sizer.size(&split) {
+        Ok(sized) => sized,
+        Err(failure) => return (Err(failure), evaluations),
+    };
     (
         Ok(Design {
             stages,
@@ -395,9 +380,6 @@ fn assignments(candidates: &[Vec<&crate::engine::Engine>]) -> Vec<Vec<usize>> {
 impl Optimizer for AnalyticalOptimizer {
     fn optimize(&self, problem: &Problem) -> Result<Solution, OptimizeError> {
         let start = Instant::now();
-        problem.is_valid()?;
-
-        let constraints = &problem.constraints;
         let (min_stages, max_stages) = problem.stage_count_range();
         let mut best: Option<Design> = None;
         let mut worst_failure = None;
@@ -450,60 +432,39 @@ impl Optimizer for AnalyticalOptimizer {
         let design = match (best, too_many) {
             (Some(design), _) => design,
             (None, Some((stage_count, combinations))) => {
-                return Err(OptimizeError::Unsupported {
-                    reason: format!(
-                        "{stage_count} stages with these engines is {combinations} \
-                        engine-to-stage combinations, more than the {MAX_ASSIGNMENTS} \
-                        tsi will search; pin engines to stages or offer fewer engines"
-                    ),
+                return Err(OptimizeError::TooManyCombinations {
+                    stage_count,
+                    combinations,
+                    limit: MAX_ASSIGNMENTS,
                 })
             }
             (None, None) => {
-                return Err(infeasible(
-                    problem,
-                    worst_failure.unwrap_or(Failure::StructuralLimit),
-                ))
+                let failure = worst_failure.unwrap_or(Failure::StructuralLimit);
+                return Err(OptimizeError::Infeasible(infeasibility(problem, failure)));
             }
         };
 
-        let tankage = constraints.structural_ratio.as_f64();
         let stages = design
             .stages
             .iter()
             .zip(&design.sized)
-            .map(|(s, sized)| {
-                Stage::with_structural_ratio(
-                    s.engine.clone(),
-                    sized.engine_count,
-                    Mass::kg(sized.propellant),
-                    tankage,
-                )
-            })
+            .map(|(s, sized)| s.build(sized))
             .collect();
-        let rocket = Rocket::new(stages, problem.payload)
-            .with_booster_isp(constraints.booster_isp)
-            .with_surface_gravity(problem.constraints.surface_gravity);
-
-        let solution = Solution::with_metadata(
-            rocket,
-            problem.target_delta_v,
+        let solution = Solution::new(
+            assemble(problem, stages),
+            problem.target_delta_v(),
             evaluations,
             start.elapsed(),
-            "Analytical",
+            OptimizerKind::Analytical,
         );
 
         // The sizing model and the Rocket type compute the same physics two
         // different ways; if they ever disagree, fail loudly rather than
         // return a rocket that does not do what we claim.
-        let achieved = solution.rocket.total_delta_v().as_mps();
-        let design_dv = problem.design_delta_v().as_mps();
-        if achieved < design_dv - DELTA_V_TOLERANCE_MPS {
-            return Err(OptimizeError::Infeasible {
-                reason: format!(
-                    "Internal consistency check failed: sized for {design_dv:.3} m/s \
-                    but the rocket delivers {achieved:.3} m/s"
-                ),
-            });
+        let achieved = solution.rocket().total_delta_v().as_mps();
+        let designed = problem.design_delta_v().as_mps();
+        if achieved < designed - DELTA_V_TOLERANCE_MPS {
+            return Err(OptimizeError::InconsistentSizing { designed, achieved });
         }
 
         Ok(solution)
@@ -514,28 +475,38 @@ impl Optimizer for AnalyticalOptimizer {
 mod tests {
     use super::*;
     use crate::engine::{Engine, EngineDatabase, Propellant};
-    use crate::optimizer::{BruteForceOptimizer, Constraints};
+    use crate::optimizer::{BruteForceOptimizer, Constraints, Infeasibility};
     use crate::physics::{IspModel, G0};
-    use crate::units::{Force, Isp, Ratio, Velocity};
+    use crate::units::{Force, Isp, Mass, Ratio, Velocity};
 
     fn get(name: &str) -> Engine {
         EngineDatabase::default().get(name).unwrap().clone()
     }
 
     fn two_stage(engines: Vec<Engine>, payload: f64, dv: f64) -> Problem {
-        Problem::new(
-            Mass::kg(payload),
-            Velocity::mps(dv),
-            engines,
-            Constraints::default(),
-        )
-        .with_stage_count(2)
+        two_stage_with(engines, payload, dv, Constraints::default())
+    }
+
+    fn two_stage_with(
+        engines: Vec<Engine>,
+        payload: f64,
+        dv: f64,
+        constraints: Constraints,
+    ) -> Problem {
+        Problem::builder()
+            .payload(Mass::kg(payload))
+            .target(Velocity::mps(dv))
+            .engines(engines)
+            .constraints(constraints)
+            .stages(2)
+            .build()
+            .unwrap()
     }
 
     #[test]
     fn lagrange_splits_identical_stages_equally() {
         let c = 350.0 * G0;
-        let split = lagrange_split(&[c, c, c], 0.08 / 1.08, 9_000.0).unwrap();
+        let split = lagrange_split(&[c, c, c], &[0.08 / 1.08; 3], 9_000.0).unwrap();
         for dv in &split {
             assert!((dv - 3_000.0).abs() < 1e-6, "{split:?}");
         }
@@ -544,7 +515,7 @@ mod tests {
     #[test]
     fn lagrange_gives_more_delta_v_to_the_better_stage() {
         // Hydrogen upper stage over a kerosene booster
-        let split = lagrange_split(&[300.0 * G0, 450.0 * G0], 0.07, 9_400.0).unwrap();
+        let split = lagrange_split(&[300.0 * G0, 450.0 * G0], &[0.07, 0.07], 9_400.0).unwrap();
         assert!(split[1] > split[0], "{split:?}");
         assert!((split.iter().sum::<f64>() - 9_400.0).abs() < 1e-6);
     }
@@ -552,7 +523,7 @@ mod tests {
     #[test]
     fn lagrange_rejects_targets_past_the_structural_limit() {
         // ε = 0.2 caps each stage at c·ln 5 ≈ 5,500 m/s for a 350 s engine
-        assert!(lagrange_split(&[350.0 * G0; 2], 0.2, 12_000.0).is_none());
+        assert!(lagrange_split(&[350.0 * G0; 2], &[0.2, 0.2], 12_000.0).is_none());
     }
 
     #[test]
@@ -567,20 +538,24 @@ mod tests {
             Isp::seconds(350.0),
             Mass::kg(0.001),
             Propellant::LoxCh4,
-        );
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![feather],
-            Constraints::default()
-                .with_booster_isp(IspModel::Vacuum)
-                .with_max_engines(100),
         )
-        .with_stage_count(2);
+        .unwrap();
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(feather)
+            .constraints(
+                Constraints::default()
+                    .with_booster_isp(IspModel::Vacuum)
+                    .with_max_engines(100),
+            )
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let s1 = solution.rocket.stage_delta_v(0).as_mps();
-        let s2 = solution.rocket.stage_delta_v(1).as_mps();
+        let s1 = solution.rocket().stage_delta_v(0).as_mps();
+        let s2 = solution.rocket().stage_delta_v(1).as_mps();
         assert!((s1 - s2).abs() < 1.0, "S1={s1:.1} S2={s2:.1}");
     }
 
@@ -589,15 +564,23 @@ mod tests {
         let problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
         assert!(solution.meets_target());
-        assert!(solution.margin.as_mps().abs() < 0.01, "{}", solution.margin);
+        assert!(
+            solution.margin().as_mps().abs() < 0.01,
+            "{}",
+            solution.margin()
+        );
     }
 
     #[test]
     fn honours_requested_margin() {
-        let mut problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
-        problem.constraints.margin = Ratio::new(0.02);
+        let problem = two_stage_with(
+            vec![get("raptor-2")],
+            5_000.0,
+            9_400.0,
+            Constraints::default().with_margin(0.02),
+        );
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert!((solution.margin.as_mps() - 188.0).abs() < 0.01);
+        assert!((solution.margin().as_mps() - 188.0).abs() < 0.01);
     }
 
     #[test]
@@ -605,12 +588,9 @@ mod tests {
         // The v0.6 optimizer returned 205.4 t here; brute force found 182.8 t.
         let problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
         let analytical = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let brute = BruteForceOptimizer::default()
-            .with_progress(false)
-            .optimize(&problem)
-            .unwrap();
-        let a = analytical.rocket.total_mass().as_kg();
-        let b = brute.rocket.total_mass().as_kg();
+        let brute = BruteForceOptimizer::default().optimize(&problem).unwrap();
+        let a = analytical.rocket().total_mass().as_kg();
+        let b = brute.rocket().total_mass().as_kg();
         assert!(
             a <= b * 1.001,
             "analytical {a:.0} kg vs brute force {b:.0} kg"
@@ -621,7 +601,7 @@ mod tests {
     fn uses_fewest_engines_that_meet_twr() {
         let problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let rocket = &solution.rocket;
+        let rocket = &solution.rocket();
         let s1 = &rocket.stages()[0];
         // One engine fewer would fail the liftoff TWR (or leave none at all).
         let without_one = (s1.engine_count() - 1) as f64 * s1.engine().thrust_sl().as_newtons()
@@ -633,27 +613,29 @@ mod tests {
     #[test]
     fn optimizes_stage_count_when_not_fixed() {
         // 3,000 m/s is easy for a single stage; a second stage is dead weight.
-        let problem = Problem::new(
-            Mass::kg(1_000.0),
-            Velocity::mps(3_000.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        );
+        let problem = Problem::builder()
+            .payload(Mass::kg(1_000.0))
+            .target(Velocity::mps(3_000.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .build()
+            .unwrap();
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert_eq!(solution.rocket.stage_count(), 1);
+        assert_eq!(solution.rocket().stage_count(), 1);
     }
 
     #[test]
     fn three_stages() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(12_000.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        )
-        .with_stage_count(3);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(12_000.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .stages(3)
+            .build()
+            .unwrap();
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert_eq!(solution.rocket.stage_count(), 3);
+        assert_eq!(solution.rocket().stage_count(), 3);
         assert!(solution.meets_target());
     }
 
@@ -661,32 +643,42 @@ mod tests {
     fn picks_hydrogen_for_the_upper_stage() {
         let problem = two_stage(vec![get("merlin-1d"), get("rl-10c")], 5_000.0, 9_400.0);
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let stages = solution.rocket.stages();
-        assert_eq!(stages[0].engine().name, "Merlin-1D");
-        assert_eq!(stages[1].engine().name, "RL-10C");
+        let stages = solution.rocket().stages();
+        assert_eq!(stages[0].engine().name(), "Merlin-1D");
+        assert_eq!(stages[1].engine().name(), "RL-10C");
     }
 
     #[test]
     fn pinned_engine_is_respected() {
         let problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0)
-            .with_pinned_engine(0, get("merlin-1d"));
+            .to_builder()
+            .pin(0, get("merlin-1d"))
+            .build()
+            .unwrap();
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert_eq!(solution.rocket.stages()[0].engine().name, "Merlin-1D");
-        assert_eq!(solution.rocket.stages()[1].engine().name, "Raptor-2");
+        assert_eq!(solution.rocket().stages()[0].engine().name(), "Merlin-1D");
+        assert_eq!(solution.rocket().stages()[1].engine().name(), "Raptor-2");
     }
 
     #[test]
     fn respects_twr_constraints() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![get("raptor-2")],
-            Constraints::new(Ratio::new(1.3), Ratio::new(0.7), 3, Ratio::new(0.08)),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(get("raptor-2"))
+            .constraints(
+                Constraints::default()
+                    .with_min_liftoff_twr(Ratio::new(1.3))
+                    .with_min_stage_twr(Ratio::new(0.7))
+                    .with_max_stages(3)
+                    .with_structural_ratio(Ratio::new(0.08)),
+            )
+            .stages(2)
+            .build()
+            .unwrap();
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert!(solution.rocket.liftoff_twr().as_f64() >= 1.3);
-        assert!(solution.rocket.stage_twr(1).as_f64() >= 0.7);
+        assert!(solution.rocket().liftoff_twr().as_f64() >= 1.3);
+        assert!(solution.rocket().stage_twr(1).as_f64() >= 0.7);
     }
 
     #[test]
@@ -710,43 +702,52 @@ mod tests {
                     base.isp_sl(),
                     base.isp_vac(),
                     base.dry_mass(),
-                    base.propellant,
+                    base.propellant(),
                 )
+                .unwrap()
             })
             .collect();
-        let mut problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_400.0),
-            engines,
-            Constraints::default(),
-        );
-        problem.constraints.max_stages = 3;
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_400.0))
+            .engines(engines)
+            .constraints(Constraints::default().with_max_stages(3))
+            .build()
+            .unwrap();
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        assert_eq!(solution.rocket.stage_count(), 2);
+        assert_eq!(solution.rocket().stage_count(), 2);
     }
 
     #[test]
     fn upper_stage_twr_failure_names_the_upper_stage_flag() {
-        let mut problem = two_stage(vec![get("raptor-2")], 5_000.0, 9_400.0);
-        problem.constraints.min_stage_twr = Ratio::new(200.0);
+        let problem = two_stage_with(
+            vec![get("raptor-2")],
+            5_000.0,
+            9_400.0,
+            Constraints::default().with_min_stage_twr(200.0),
+        );
         match AnalyticalOptimizer.optimize(&problem) {
-            Err(OptimizeError::Infeasible { reason }) => {
-                assert!(reason.contains("--min-upper-twr"), "{reason}");
-                assert!(reason.contains("stage 2"), "{reason}");
+            Err(OptimizeError::Infeasible(Infeasibility::EnginesTooHeavy { stage, .. })) => {
+                assert_eq!(stage, 1);
             }
-            other => panic!("expected infeasible, got {other:?}"),
+            other => panic!("expected engines too heavy on stage 2, got {other:?}"),
         }
     }
 
     #[test]
     fn engine_limit_is_reported() {
-        let mut problem = two_stage(vec![get("rutherford")], 50_000.0, 9_000.0);
-        problem.constraints.max_engines_per_stage = 2;
-        match AnalyticalOptimizer.optimize(&problem) {
-            Err(OptimizeError::Infeasible { reason }) => {
-                assert!(reason.contains("--max-engines"), "{reason}")
-            }
-            other => panic!("expected infeasible, got {other:?}"),
-        }
+        let problem = two_stage_with(
+            vec![get("rutherford")],
+            50_000.0,
+            9_000.0,
+            Constraints::default().with_max_engines(2),
+        );
+        assert!(matches!(
+            AnalyticalOptimizer.optimize(&problem),
+            Err(OptimizeError::Infeasible(Infeasibility::EngineLimit {
+                max_engines: 2,
+                ..
+            }))
+        ));
     }
 }

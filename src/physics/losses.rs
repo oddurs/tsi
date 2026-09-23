@@ -24,18 +24,14 @@
 //! # Example
 //!
 //! ```
-//! use tsiolkovsky::physics::losses::{gravity_loss, drag_loss, total_losses, LossEstimate};
-//! use tsiolkovsky::units::{Mass, Force, Time, Ratio};
+//! use tsiolkovsky::physics::losses::total_losses;
+//! use tsiolkovsky::units::{Time, Ratio};
 //!
 //! // First stage: 200s burn, TWR 1.3
-//! let burn_time = Time::seconds(200.0);
-//! let twr = Ratio::new(1.3);
-//!
-//! // Estimate losses
-//! let estimate = total_losses(burn_time, twr);
-//! println!("Gravity loss: {} m/s", estimate.gravity_loss_mps);
-//! println!("Drag loss: {} m/s", estimate.drag_loss_mps);
-//! println!("Total: {} m/s", estimate.total_loss_mps);
+//! let estimate = total_losses(Time::seconds(200.0), Ratio::new(1.3));
+//! println!("Gravity loss: {}", estimate.gravity);
+//! println!("Drag loss: {}", estimate.drag);
+//! println!("Total: {}", estimate.total());
 //! ```
 //!
 //! # References
@@ -43,219 +39,165 @@
 //! - Humble, R. et al. "Space Propulsion Analysis and Design" (1995)
 //! - Sutton, G. "Rocket Propulsion Elements" (8th ed.)
 
-use crate::units::{Ratio, Time};
+use crate::stage::Rocket;
+use crate::units::{Ratio, Time, Velocity};
 
-/// Estimated delta-v losses for a launch.
-#[derive(Debug, Clone, Copy)]
+use super::G0;
+
+/// Orbital velocity in a 200 km circular low Earth orbit, m/s.
+const LEO_ORBITAL_VELOCITY_MPS: f64 = 7_800.0;
+
+/// Margin added on top of losses in [`leo_delta_v_requirement`], m/s.
+const LEO_MARGIN_MPS: f64 = 150.0;
+
+/// Estimated delta-v losses for a launch to low Earth orbit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct LossEstimate {
-    /// Gravity drag loss in m/s.
-    pub gravity_loss_mps: f64,
-
-    /// Atmospheric drag loss in m/s.
-    pub drag_loss_mps: f64,
-
-    /// Steering/maneuvering loss in m/s.
-    pub steering_loss_mps: f64,
-
-    /// Total losses (sum of all components) in m/s.
-    pub total_loss_mps: f64,
+    /// Delta-v spent holding the rocket up against gravity
+    pub gravity: Velocity,
+    /// Delta-v lost to air resistance
+    pub drag: Velocity,
+    /// Delta-v spent turning
+    pub steering: Velocity,
 }
 
 impl LossEstimate {
-    /// Create a new loss estimate from components.
-    pub fn new(gravity: f64, drag: f64, steering: f64) -> Self {
+    /// A loss estimate from its components.
+    pub fn new(gravity: Velocity, drag: Velocity, steering: Velocity) -> Self {
         Self {
-            gravity_loss_mps: gravity,
-            drag_loss_mps: drag,
-            steering_loss_mps: steering,
-            total_loss_mps: gravity + drag + steering,
+            gravity,
+            drag,
+            steering,
         }
     }
 
-    /// Create a zero loss estimate.
+    /// No losses.
     pub fn zero() -> Self {
-        Self::new(0.0, 0.0, 0.0)
+        let zero = Velocity::mps(0.0);
+        Self::new(zero, zero, zero)
+    }
+
+    /// All losses together.
+    pub fn total(&self) -> Velocity {
+        self.gravity + self.drag + self.steering
     }
 }
 
-/// Estimate gravity losses during ascent.
+/// Estimate gravity losses during a first stage's ascent from Earth.
 ///
-/// Gravity loss is the delta-v spent fighting gravity during the vertical
-/// portion of ascent. It depends on:
+/// Gravity loss is the delta-v spent holding the rocket up rather than
+/// speeding it along. While the rocket climbs at flight path angle θ,
+/// gravity takes g·sin θ per second from it:
 ///
-/// - **Burn time**: Longer burns mean more time fighting gravity
-/// - **Initial TWR**: Higher TWR means faster acceleration, less gravity loss
-///
-/// # Model
-///
-/// Uses an empirical model:
 /// ```text
-/// Δv_gravity ≈ g₀ × t_burn × sin(θ_avg)
+/// Δv_gravity = ∫ g · sin θ dt ≈ g₀ · t_burn · ⟨sin θ⟩
 /// ```
 ///
-/// Where θ_avg is the average pitch angle during burn. For a typical
-/// gravity turn, this is approximately:
-/// ```text
-/// sin(θ_avg) ≈ 0.85 / sqrt(TWR)
-/// ```
+/// A rocket with more thrust per unit weight pitches over sooner, so the
+/// average climb angle falls as liftoff TWR rises.
 ///
-/// # Arguments
+/// # Model and origin
 ///
-/// * `burn_time` - Total burn time for the first stage
-/// * `twr` - Initial thrust-to-weight ratio at liftoff
+/// tsi uses ⟨sin θ⟩ ≈ 0.85 / √TWR. This is an **empirical fit, not a
+/// derivation**: it was chosen so that typical first stages (150-200 s burns,
+/// liftoff TWR 1.2-1.5) come out in the 1,000-1,500 m/s range commonly quoted
+/// for launches to low Earth orbit. TWR is clamped to 1-10.
 ///
-/// # Returns
+/// # Where it breaks down
 ///
-/// Estimated gravity loss in m/s.
-///
-/// # Example
+/// - It knows nothing about the actual trajectory: a lofted or depressed
+///   ascent changes the answer by hundreds of m/s.
+/// - It covers the first stage only. Upper stages also lose delta-v to
+///   gravity, typically a few hundred m/s, but how much depends on the
+///   trajectory's shape, which a closed-form model can't know. Trajectory
+///   simulation (planned after 1.0) will cover every stage.
+/// - It assumes Earth's gravity.
 ///
 /// ```
 /// use tsiolkovsky::physics::losses::gravity_loss;
-/// use tsiolkovsky::units::{Time, Ratio};
+/// use tsiolkovsky::units::{Ratio, Time};
 ///
-/// let burn = Time::seconds(150.0);
-/// let twr = Ratio::new(1.3);
-///
-/// let loss = gravity_loss(burn, twr);
-/// println!("Gravity loss: {:.0} m/s", loss);  // ~1,100 m/s
+/// let loss = gravity_loss(Time::seconds(150.0), Ratio::new(1.3));
+/// assert!((1_000.0..1_200.0).contains(&loss.as_mps()));
 /// ```
-pub fn gravity_loss(burn_time: Time, twr: Ratio) -> f64 {
-    const G0: f64 = 9.80665;
-
-    // Clamp TWR to reasonable range to avoid numerical issues
-    let twr_val = twr.as_f64().clamp(1.0, 10.0);
-
-    // Empirical model: average sin(pitch) decreases with higher TWR
-    // Higher TWR means faster pitchover, less time vertical
-    let avg_sin_pitch = 0.85 / twr_val.sqrt();
-
-    G0 * burn_time.as_seconds() * avg_sin_pitch
+pub fn gravity_loss(burn_time: Time, liftoff_twr: Ratio) -> Velocity {
+    let twr = liftoff_twr.as_f64().clamp(1.0, 10.0);
+    Velocity::mps(G0 * burn_time.as_seconds() * 0.85 / twr.sqrt())
 }
 
-/// Estimate atmospheric drag losses.
+/// Estimate atmospheric drag losses during ascent from Earth.
 ///
-/// Drag loss depends on:
+/// # Model and origin
 ///
-/// - **Vehicle size and shape** (ballistic coefficient)
-/// - **Velocity through atmosphere**
-/// - **Time in dense atmosphere**
-///
-/// # Model
-///
-/// Uses a simplified empirical model based on typical launch vehicles:
 /// ```text
-/// Δv_drag ≈ 150 × (1 + 0.5 / TWR)
+/// Δv_drag ≈ 150 m/s × (1 + 0.5 / TWR)
 /// ```
 ///
-/// This accounts for:
-/// - Baseline drag of ~150 m/s for high-TWR vehicles
-/// - Increased drag for low-TWR vehicles (longer time in atmosphere)
+/// An **empirical fit**: a 150 m/s baseline for a brisk climb, rising toward
+/// 225 m/s for a rocket that lingers in the dense lower atmosphere. It sits
+/// inside the 100-400 m/s range quoted for medium and heavy launchers (Humble
+/// et al., *Space Propulsion Analysis and Design*, 1995). TWR is clamped to 1-10.
 ///
-/// # Arguments
+/// # Where it breaks down
 ///
-/// * `twr` - Initial thrust-to-weight ratio at liftoff
-///
-/// # Returns
-///
-/// Estimated drag loss in m/s.
-///
-/// # Limitations
-///
-/// This model does not account for:
-/// - Vehicle-specific drag coefficients
-/// - Fairing size and shape
-/// - Launch site altitude
-///
-/// For more accurate estimates, trajectory simulation is required.
-pub fn drag_loss(twr: Ratio) -> f64 {
-    // Clamp TWR to reasonable range
-    let twr_val = twr.as_f64().clamp(1.0, 10.0);
-
-    // Empirical model: higher TWR = faster through max-q, less drag
-    // Baseline ~150 m/s, up to ~250 m/s for low-TWR vehicles
-    150.0 * (1.0 + 0.5 / twr_val)
+/// Drag really depends on the rocket's size, shape and mass (its ballistic
+/// coefficient), which this ignores. A small, light rocket such as Electron
+/// loses proportionally more to drag than a Saturn V; this model gives them
+/// the same.
+pub fn drag_loss(liftoff_twr: Ratio) -> Velocity {
+    let twr = liftoff_twr.as_f64().clamp(1.0, 10.0);
+    Velocity::mps(150.0 * (1.0 + 0.5 / twr))
 }
 
-/// Estimate steering losses during ascent.
+/// Estimate steering losses during ascent: a flat 100 m/s.
 ///
-/// Steering losses come from:
-/// - Gravity turn maneuvering
-/// - Pitch/yaw corrections
-/// - Dog-leg maneuvers for inclination changes
-///
-/// For direct ascent to LEO, this is typically 50-150 m/s.
-///
-/// # Arguments
-///
-/// * `_burn_time` - Total burn time (currently unused, for future refinement)
-///
-/// # Returns
-///
-/// Estimated steering loss in m/s.
-pub fn steering_loss(_burn_time: Time) -> f64 {
-    // Conservative estimate for standard gravity turn
-    100.0
+/// Steering losses come from pointing thrust away from the velocity vector,
+/// for the gravity turn, guidance corrections, and any dog-leg to change
+/// inclination. 100 m/s is the middle of the 50-150 m/s usually quoted for a
+/// direct ascent to low Earth orbit. It is not a model: a launch that has to
+/// change plane can lose far more.
+pub fn steering_loss() -> Velocity {
+    Velocity::mps(100.0)
 }
 
-/// Calculate total estimated losses for Earth to LEO ascent.
-///
-/// Combines gravity, drag, and steering losses into a single estimate.
-///
-/// # Arguments
-///
-/// * `first_stage_burn` - Burn time of the first stage
-/// * `liftoff_twr` - Thrust-to-weight ratio at liftoff
-///
-/// # Returns
-///
-/// A [`LossEstimate`] containing individual and total losses.
-///
-/// # Example
+/// Estimated losses for an Earth-to-orbit ascent, from the first stage's
+/// burn time and liftoff TWR.
 ///
 /// ```
 /// use tsiolkovsky::physics::losses::total_losses;
-/// use tsiolkovsky::units::{Time, Ratio};
+/// use tsiolkovsky::units::{Ratio, Time};
 ///
-/// let burn = Time::seconds(170.0);  // Falcon 9 first stage
-/// let twr = Ratio::new(1.28);       // F9 liftoff TWR
-///
-/// let losses = total_losses(burn, twr);
-/// println!("Total losses: {:.0} m/s", losses.total_loss_mps);
-/// // Approximately 1,500-1,700 m/s
+/// // Falcon 9: a ~170 s first stage burn, liftoff TWR ~1.28
+/// let losses = total_losses(Time::seconds(170.0), Ratio::new(1.28));
+/// assert!((1_400.0..2_000.0).contains(&losses.total().as_mps()));
 /// ```
 pub fn total_losses(first_stage_burn: Time, liftoff_twr: Ratio) -> LossEstimate {
-    let gravity = gravity_loss(first_stage_burn, liftoff_twr);
-    let drag = drag_loss(liftoff_twr);
-    let steering = steering_loss(first_stage_burn);
-
-    LossEstimate::new(gravity, drag, steering)
+    LossEstimate::new(
+        gravity_loss(first_stage_burn, liftoff_twr),
+        drag_loss(liftoff_twr),
+        steering_loss(),
+    )
 }
 
-/// Estimate required delta-v for LEO (Low Earth Orbit) from sea level.
-///
-/// LEO requires approximately 9,400 m/s of delta-v:
-/// - Orbital velocity: ~7,800 m/s
-/// - Gravity losses: ~1,200 m/s
-/// - Drag losses: ~150 m/s
-/// - Steering losses: ~100 m/s
-/// - Margin: ~150 m/s
-///
-/// # Arguments
-///
-/// * `first_stage_burn` - First stage burn time
-/// * `liftoff_twr` - Thrust-to-weight ratio at liftoff
-///
-/// # Returns
-///
-/// Required delta-v in m/s for LEO insertion.
-pub fn leo_delta_v_requirement(first_stage_burn: Time, liftoff_twr: Ratio) -> f64 {
-    const ORBITAL_VELOCITY_LEO: f64 = 7_800.0;
-    const MARGIN: f64 = 150.0;
+/// Estimated ascent losses for a rocket, from its first stage.
+pub fn ascent_losses(rocket: &Rocket) -> LossEstimate {
+    let first = &rocket.stages()[0];
+    total_losses(first.burn_time(), rocket.liftoff_twr())
+}
 
-    let losses = total_losses(first_stage_burn, liftoff_twr);
+/// Delta-v a rocket needs to reach low Earth orbit from sea level: orbital
+/// velocity (7,800 m/s), plus estimated losses, plus 150 m/s of margin.
+///
+/// This is where the usual "9,400 m/s to LEO" comes from.
+pub fn leo_delta_v_requirement(first_stage_burn: Time, liftoff_twr: Ratio) -> Velocity {
+    Velocity::mps(LEO_ORBITAL_VELOCITY_MPS + LEO_MARGIN_MPS)
+        + total_losses(first_stage_burn, liftoff_twr).total()
+}
 
-    ORBITAL_VELOCITY_LEO + losses.total_loss_mps + MARGIN
+/// Orbital velocity in a 200 km circular low Earth orbit.
+pub fn leo_orbital_velocity() -> Velocity {
+    Velocity::mps(LEO_ORBITAL_VELOCITY_MPS)
 }
 
 #[cfg(test)]
@@ -268,7 +210,7 @@ mod tests {
         let burn = Time::seconds(170.0);
         let twr = Ratio::new(1.3);
 
-        let loss = gravity_loss(burn, twr);
+        let loss = gravity_loss(burn, twr).as_mps();
 
         // Should be in the 1000-1500 m/s range
         assert!(
@@ -282,8 +224,8 @@ mod tests {
     fn gravity_loss_increases_with_burn_time() {
         let twr = Ratio::new(1.3);
 
-        let loss_short = gravity_loss(Time::seconds(100.0), twr);
-        let loss_long = gravity_loss(Time::seconds(200.0), twr);
+        let loss_short = gravity_loss(Time::seconds(100.0), twr).as_mps();
+        let loss_long = gravity_loss(Time::seconds(200.0), twr).as_mps();
 
         assert!(
             loss_long > loss_short,
@@ -295,8 +237,8 @@ mod tests {
     fn gravity_loss_decreases_with_higher_twr() {
         let burn = Time::seconds(150.0);
 
-        let loss_low_twr = gravity_loss(burn, Ratio::new(1.2));
-        let loss_high_twr = gravity_loss(burn, Ratio::new(1.8));
+        let loss_low_twr = gravity_loss(burn, Ratio::new(1.2)).as_mps();
+        let loss_high_twr = gravity_loss(burn, Ratio::new(1.8)).as_mps();
 
         assert!(
             loss_high_twr < loss_low_twr,
@@ -306,7 +248,7 @@ mod tests {
 
     #[test]
     fn drag_loss_reasonable_range() {
-        let loss = drag_loss(Ratio::new(1.3));
+        let loss = drag_loss(Ratio::new(1.3)).as_mps();
 
         // Should be in the 150-250 m/s range
         assert!(
@@ -318,8 +260,8 @@ mod tests {
 
     #[test]
     fn drag_loss_decreases_with_higher_twr() {
-        let loss_low = drag_loss(Ratio::new(1.2));
-        let loss_high = drag_loss(Ratio::new(2.0));
+        let loss_low = drag_loss(Ratio::new(1.2)).as_mps();
+        let loss_high = drag_loss(Ratio::new(2.0)).as_mps();
 
         assert!(
             loss_high < loss_low,
@@ -334,15 +276,15 @@ mod tests {
 
         // Total should be around 1500-1800 m/s
         assert!(
-            losses.total_loss_mps > 1400.0 && losses.total_loss_mps < 2000.0,
+            (1400.0..2000.0).contains(&losses.total().as_mps()),
             "total losses {} out of expected range",
-            losses.total_loss_mps
+            losses.total()
         );
     }
 
     #[test]
     fn leo_dv_requirement_reasonable() {
-        let dv = leo_delta_v_requirement(Time::seconds(170.0), Ratio::new(1.3));
+        let dv = leo_delta_v_requirement(Time::seconds(170.0), Ratio::new(1.3)).as_mps();
 
         // LEO typically needs 9,200-9,600 m/s
         assert!(
@@ -354,11 +296,12 @@ mod tests {
 
     #[test]
     fn loss_estimate_components_sum() {
-        let estimate = LossEstimate::new(1000.0, 200.0, 100.0);
-
-        assert!(
-            (estimate.total_loss_mps - 1300.0).abs() < 0.001,
-            "total should be sum of components"
+        let estimate = LossEstimate::new(
+            Velocity::mps(1000.0),
+            Velocity::mps(200.0),
+            Velocity::mps(100.0),
         );
+        assert!((estimate.total().as_mps() - 1300.0).abs() < 1e-9);
+        assert_eq!(LossEstimate::zero().total().as_mps(), 0.0);
     }
 }

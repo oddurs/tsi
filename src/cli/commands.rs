@@ -1,18 +1,22 @@
-use std::io;
+use std::io::{self, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Result};
 use clap::CommandFactory;
 use clap_complete::generate;
+use serde::Serialize;
 
-use crate::engine::{Engine, EngineDatabase, Propellant};
-use crate::optimizer::{
-    AnalyticalOptimizer, BruteForceOptimizer, Constraints, MonteCarloRunner, Optimizer, Problem,
-    Uncertainty,
+use tsiolkovsky::engine::{Engine, EngineDatabase, Propellant};
+use tsiolkovsky::optimizer::{
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, Infeasibility, MonteCarloResults,
+    MonteCarloRunner, MonteCarloSummary, OptimizeError, Optimizer, Problem, Progress,
+    SolutionReport, Uncertainty,
 };
+use tsiolkovsky::physics::losses;
+use tsiolkovsky::physics::{burn_time, delta_v, twr, G0};
+use tsiolkovsky::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
+
 use crate::output::{diagram, terminal};
-use crate::physics::losses;
-use crate::physics::{burn_time, delta_v, twr, G0};
-use crate::units::{format_thousands_f64, Force, Isp, Mass, Ratio, Velocity};
 
 use super::args::{
     CalculateArgs, CalculateOutputFormat, Cli, CompletionsArgs, EnginesArgs, OptimizeArgs,
@@ -93,15 +97,15 @@ pub fn calculate(args: CalculateArgs) -> Result<()> {
         let isp = engine.isp_vac();
         let thrust = engine.thrust_vac() * args.engine_count;
         let name = if args.engine_count > 1 {
-            format!("{} (×{})", engine.name, args.engine_count)
+            format!("{} (×{})", engine.name(), args.engine_count)
         } else {
-            engine.name.clone()
+            engine.name().to_string()
         };
         (
             isp,
             Some(thrust),
             Some(name),
-            Some(engine.propellant.name().to_string()),
+            Some(engine.propellant().name().to_string()),
         )
     } else if let Some(isp_s) = args.isp {
         let thrust = args.thrust.map(Force::newtons);
@@ -222,13 +226,17 @@ pub fn engines(args: EnginesArgs) -> Result<()> {
         .filter(|e| {
             // Filter by propellant
             if let Some(ref prop_filter) = args.propellant {
-                if !e.propellant.matches(prop_filter) {
+                if !e.propellant().matches(prop_filter) {
                     return false;
                 }
             }
             // Filter by name
             if let Some(ref name_filter) = args.name {
-                if !e.name.to_lowercase().contains(&name_filter.to_lowercase()) {
+                if !e
+                    .name()
+                    .to_lowercase()
+                    .contains(&name_filter.to_lowercase())
+                {
                     return false;
                 }
             }
@@ -276,8 +284,8 @@ pub fn engines(args: EnginesArgs) -> Result<()> {
                     };
                     println!(
                         "{:<16} {:<12} {:>8} kN {:>10} {:>7}s {:>8} {:>10} kg",
-                        engine.name,
-                        engine.propellant.name(),
+                        engine.name(),
+                        engine.propellant().name(),
                         format_thousands_f64(engine.thrust_vac().as_kilonewtons()),
                         thrust_sl,
                         engine.isp_vac().as_seconds() as u32,
@@ -295,8 +303,8 @@ pub fn engines(args: EnginesArgs) -> Result<()> {
                 for engine in &engines {
                     println!(
                         "{:<16} {:<12} {:>10} kN {:>8}s {:>10} kg",
-                        engine.name,
-                        engine.propellant.name(),
+                        engine.name(),
+                        engine.propellant().name(),
                         format_thousands_f64(engine.thrust_vac().as_kilonewtons()),
                         engine.isp_vac().as_seconds() as u32,
                         format_thousands_f64(engine.dry_mass().as_kg()),
@@ -339,8 +347,8 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     if args.max_engines == 0 {
         errors.push("--max-engines must be at least 1".to_string());
     }
-    if !(args.structural_ratio > 0.0 && args.structural_ratio < 1.0) {
-        errors.push("--structural-ratio must be between 0 and 1".to_string());
+    if args.structural_ratio.iter().any(|&r| !(r > 0.0 && r < 1.0)) {
+        errors.push("--structural-ratio values must be between 0 and 1".to_string());
     }
 
     if !errors.is_empty() {
@@ -368,7 +376,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
         // Check custom engines first
         if let Some(engine) = custom_engines
             .iter()
-            .find(|e| e.name.eq_ignore_ascii_case(name))
+            .find(|e| e.name().eq_ignore_ascii_case(name))
         {
             return Ok(engine.clone());
         }
@@ -387,7 +395,7 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
             if !custom_engines.is_empty() {
                 msg.push_str("\n\nCustom engines defined:");
                 for e in &custom_engines {
-                    msg.push_str(&format!("\n  {}", e.name));
+                    msg.push_str(&format!("\n  {}", e.name()));
                 }
             }
             anyhow::anyhow!(msg)
@@ -403,34 +411,33 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let max_stages = args
         .stages
         .map_or(args.max_stages, |n| n.max(args.max_stages));
-    let constraints = Constraints::new(
-        Ratio::new(args.min_twr),
-        Ratio::new(args.min_upper_twr),
-        max_stages,
-        Ratio::new(args.structural_ratio),
-    )
-    .with_max_engines(args.max_engines)
-    .with_margin(Ratio::new(args.margin))
-    .with_surface_gravity(args.gravity.as_mps2())
-    .with_booster_isp(args.gravity.booster_isp());
+    let constraints = Constraints::default()
+        .with_min_liftoff_twr(args.min_twr)
+        .with_min_stage_twr(args.min_upper_twr)
+        .with_max_stages(max_stages)
+        .with_structural_ratios(args.structural_ratio.iter().copied())
+        .with_max_engines(args.max_engines)
+        .with_margin(args.margin)
+        .with_surface_gravity(args.gravity.as_mps2())
+        .with_booster_isp(args.gravity.booster_isp());
 
     // Build problem
-    let mut problem = Problem::new(
-        Mass::kg(args.payload),
-        Velocity::mps(args.target_dv),
-        engines,
-        constraints,
-    );
+    let mut builder = Problem::builder()
+        .payload(Mass::kg(args.payload))
+        .target(Velocity::mps(args.target_dv))
+        .engines(engines)
+        .constraints(constraints);
     if let Some(n) = args.stages {
-        problem = problem.with_stage_count(n);
+        builder = builder.stages(n);
     }
-
-    // Pin per-stage engines
     for (index, name) in [(0, &args.stage1_engine), (1, &args.stage2_engine)] {
         if let Some(name) = name {
-            problem = problem.with_pinned_engine(index, lookup_engine(name)?);
+            builder = builder.pin(index, lookup_engine(name)?);
         }
     }
+    let problem = builder
+        .build()
+        .map_err(|e| anyhow::anyhow!("Invalid problem: {e}"))?;
 
     if args.sea_level {
         eprintln!(
@@ -443,65 +450,177 @@ pub fn optimize(args: OptimizeArgs) -> Result<()> {
     let show_progress = !args.quiet && args.output == OptimizeOutputFormat::Pretty;
     let solution = match select_optimizer(&args) {
         SelectedOptimizer::Analytical => AnalyticalOptimizer.optimize(&problem),
-        SelectedOptimizer::BruteForce => BruteForceOptimizer::default()
-            .with_progress(show_progress)
-            .optimize(&problem),
+        SelectedOptimizer::BruteForce => {
+            let mut optimizer = BruteForceOptimizer::default();
+            if show_progress {
+                eprintln!("  Optimizer: BruteForce (parallel)");
+                optimizer = optimizer.with_progress(StderrProgress::default());
+            }
+            optimizer.optimize(&problem)
+        }
     }
-    .map_err(|e| anyhow::anyhow!("{}", e))?;
+    .map_err(|e| anyhow::anyhow!(explain(&e)))?;
 
     // Stress the design with Monte Carlo analysis if requested
-    let mc_results = args.monte_carlo.map(|iterations| {
-        let mut runner = MonteCarloRunner::new(uncertainty_from_level(args.uncertainty))
-            .with_progress(show_progress);
-        if let Some(seed) = args.seed {
-            runner = runner.with_seed(seed);
+    let mc_results = match args.monte_carlo {
+        Some(iterations) => {
+            let mut runner = MonteCarloRunner::new(uncertainty_from_level(args.uncertainty));
+            if show_progress {
+                runner = runner.with_progress(StderrProgress::default());
+            }
+            if let Some(seed) = args.seed {
+                runner = runner.with_seed(seed);
+            }
+            Some(runner.run_design(&solution, iterations)?)
         }
-        runner.run_design(&solution, iterations)
-    });
+        None => None,
+    };
 
     // Output results
     match args.output {
         OptimizeOutputFormat::Pretty => {
-            print_solution_pretty(&args, &solution);
+            terminal::print_solution(&solution, args.margin);
             if args.diagram {
-                diagram::print_rocket_diagram(&solution.rocket, args.payload);
+                diagram::print_rocket_diagram(solution.rocket(), args.payload);
             }
             if args.show_losses {
-                print_losses_estimate(&solution);
+                let losses = losses::ascent_losses(solution.rocket());
+                terminal::print_losses(&losses, solution.rocket().total_delta_v());
             }
             if let Some(ref mc) = mc_results {
                 terminal::print_monte_carlo_results(mc);
             }
         }
         OptimizeOutputFormat::Json => {
-            print_solution_json(&args, &solution, mc_results.as_ref())?;
+            let output = OptimizeJson {
+                schema_version: JSON_SCHEMA_VERSION,
+                design_margin_percent: args.margin * 100.0,
+                solution: solution.report(),
+                monte_carlo: mc_results.as_ref().map(MonteCarloResults::summary),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
         }
     }
 
     Ok(())
 }
 
-/// A finite number greater than zero. NaN fails every comparison, so
-/// checking `x <= 0.0` alone would let it through.
-fn positive(x: f64) -> bool {
-    x.is_finite() && x > 0.0
+/// Version of the `tsi optimize --output json` format. Raised whenever a
+/// field is removed or changes meaning; adding fields doesn't raise it.
+const JSON_SCHEMA_VERSION: u32 = 1;
+
+/// The JSON document `tsi optimize --output json` prints.
+#[derive(Serialize)]
+struct OptimizeJson {
+    schema_version: u32,
+    design_margin_percent: f64,
+    #[serde(flatten)]
+    solution: SolutionReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    monte_carlo: Option<MonteCarloSummary>,
+}
+
+/// Turn an optimization error into a message with advice about which flags
+/// to change. The library reports causes; suggesting flags is the CLI's job.
+fn explain(error: &OptimizeError) -> String {
+    let OptimizeError::Infeasible(cause) = error else {
+        return error.to_string();
+    };
+    let suggestions: Vec<String> = match cause {
+        Infeasibility::StructuralLimit { .. } => vec![
+            "Lower --structural-ratio".into(),
+            "Allow more stages with --max-stages".into(),
+            "Use an engine with higher ISP".into(),
+            "Reduce target delta-v".into(),
+        ],
+        Infeasibility::EngineLimit {
+            stage,
+            required_twr,
+            ..
+        } => vec![
+            "Allow more engines with --max-engines".into(),
+            format!(
+                "Lower {} (currently {:.2})",
+                twr_flag(*stage),
+                required_twr.as_f64()
+            ),
+            "Use an engine with higher thrust".into(),
+        ],
+        Infeasibility::EnginesTooHeavy {
+            stage,
+            required_twr,
+            ..
+        } => vec![
+            format!(
+                "Lower {} (currently {:.2})",
+                twr_flag(*stage),
+                required_twr.as_f64()
+            ),
+            "Use an engine with a better thrust-to-weight ratio".into(),
+        ],
+        Infeasibility::BoosterTooSmall { .. } => vec![
+            "Increase target delta-v, or use a single stage with --stages 1".into(),
+            "Use a first-stage engine with more thrust".into(),
+        ],
+        Infeasibility::SearchMissed { .. } => vec!["Use --optimizer analytical".into()],
+        _ => vec![],
+    };
+    let mut message = error.to_string();
+    if !suggestions.is_empty() {
+        message.push_str("\n\nSuggestions:");
+        for s in suggestions {
+            message.push_str("\n  - ");
+            message.push_str(&s);
+        }
+    }
+    message
+}
+
+/// The flag that sets the minimum TWR for a stage.
+fn twr_flag(stage: usize) -> &'static str {
+    if stage == 0 {
+        "--min-twr"
+    } else {
+        "--min-upper-twr"
+    }
+}
+
+/// Progress on stderr: a phase line, then a percentage that updates in place.
+#[derive(Default)]
+struct StderrProgress {
+    total: AtomicU64,
+    shown: AtomicU64,
+}
+
+impl Progress for StderrProgress {
+    fn start(&self, phase: &str, total: u64) {
+        self.total.store(total.max(1), Ordering::Relaxed);
+        self.shown.store(u64::MAX, Ordering::Relaxed);
+        eprintln!("  {phase}");
+    }
+
+    fn advance(&self, done: u64) {
+        let total = self.total.load(Ordering::Relaxed);
+        let percent = done.min(total) * 100 / total;
+        // Redraw only when the whole-number percentage changes.
+        if self.shown.swap(percent, Ordering::Relaxed) != percent {
+            eprint!("\r  {percent}% ({done}/{total})");
+            let _ = io::stderr().flush();
+        }
+    }
+
+    fn finish(&self) {
+        eprintln!();
+    }
 }
 
 /// Convert CLI uncertainty level to Uncertainty struct.
 fn uncertainty_from_level(level: UncertaintyLevel) -> Uncertainty {
     match level {
         UncertaintyLevel::None => Uncertainty::none(),
-        UncertaintyLevel::Low => Uncertainty {
-            isp_percent: 0.5,
-            thrust_percent: 1.0,
-            structural_percent: 3.0,
-        },
+        UncertaintyLevel::Low => Uncertainty::low(),
         UncertaintyLevel::Default => Uncertainty::default(),
-        UncertaintyLevel::High => Uncertainty {
-            isp_percent: 2.0,
-            thrust_percent: 3.0,
-            structural_percent: 8.0,
-        },
+        UncertaintyLevel::High => Uncertainty::high(),
     }
 }
 
@@ -521,86 +640,10 @@ fn select_optimizer(args: &OptimizeArgs) -> SelectedOptimizer {
     }
 }
 
-fn print_solution_pretty(args: &OptimizeArgs, solution: &crate::optimizer::Solution) {
-    terminal::print_solution_with_options(solution, args.margin);
-}
-
-fn print_solution_json(
-    args: &OptimizeArgs,
-    solution: &crate::optimizer::Solution,
-    mc_results: Option<&crate::optimizer::MonteCarloResults>,
-) -> Result<()> {
-    let rocket = &solution.rocket;
-    let stages = rocket.stages();
-
-    let stages_json: Vec<_> = stages
-        .iter()
-        .enumerate()
-        .map(|(i, stage)| {
-            let mut json = serde_json::json!({
-                "stage": i + 1,
-                "engine": stage.engine().name,
-                "engine_count": stage.engine_count(),
-                "propellant_kg": stage.propellant_mass().as_kg(),
-                "dry_mass_kg": stage.dry_mass().as_kg(),
-                "wet_mass_kg": stage.wet_mass().as_kg(),
-                "delta_v_mps": rocket.stage_delta_v(i).as_mps(),
-                "isp_s": stage.engine().isp_for(rocket.isp_model(i)).as_seconds(),
-                "burn_time_s": stage.burn_time().as_seconds(),
-                // Vacuum thrust over the whole stack above and including
-                // this stage, at the moment it ignites
-                "twr_ignition": rocket.stage_twr(i).as_f64(),
-            });
-            if i == 0 {
-                // What gets the rocket off the pad
-                json["twr_liftoff"] = serde_json::json!(rocket.liftoff_twr().as_f64());
-            }
-            json
-        })
-        .collect();
-
-    let mut output = serde_json::json!({
-        "target_delta_v_mps": args.target_dv,
-        "payload_kg": args.payload,
-        "total_mass_kg": rocket.total_mass().as_kg(),
-        "total_delta_v_mps": rocket.total_delta_v().as_mps(),
-        "payload_fraction": rocket.payload_fraction().as_f64(),
-        "margin_mps": solution.margin.as_mps(),
-        "margin_percent": solution.margin_percent(Velocity::mps(args.target_dv)),
-        "design_margin_percent": args.margin * 100.0,
-        "booster_isp_model": rocket.booster_isp().label(),
-        "stages": stages_json,
-        "metadata": {
-            "optimizer": solution.optimizer_name,
-            "iterations": solution.iterations,
-            "runtime_ms": solution.runtime.as_millis(),
-        },
-    });
-
-    // Add Monte Carlo results if available
-    if let Some(mc) = mc_results {
-        output["monte_carlo"] = serde_json::to_value(mc.to_json_summary())?;
-    }
-
-    println!("{}", serde_json::to_string_pretty(&output)?);
-    Ok(())
-}
-
-/// Print estimated atmospheric and gravity losses.
-fn print_losses_estimate(solution: &crate::optimizer::Solution) {
-    let rocket = &solution.rocket;
-    let stages = rocket.stages();
-
-    // Use first stage parameters for loss estimation
-    if let Some(first_stage) = stages.first() {
-        let burn_time = first_stage.burn_time();
-        let liftoff_twr = rocket.liftoff_twr();
-
-        let estimate = losses::total_losses(burn_time, liftoff_twr);
-        let total_dv = rocket.total_delta_v().as_mps();
-
-        terminal::print_losses(&estimate, total_dv);
-    }
+/// A finite number greater than zero. NaN fails every comparison, so
+/// checking `x <= 0.0` alone would let it through.
+fn positive(x: f64) -> bool {
+    x.is_finite() && x > 0.0
 }
 
 /// Parse a custom engine specification string.
@@ -683,7 +726,7 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
     let isp_vac = Isp::seconds(isp_s);
     let isp_sl = Isp::seconds(isp_s * 0.85); // Rough sea-level approximation
 
-    Ok(Engine::new(
+    Engine::new(
         name,
         thrust_sl,
         thrust_vac,
@@ -691,7 +734,8 @@ fn parse_custom_engine(spec: &str) -> Result<Engine> {
         isp_vac,
         Mass::kg(mass_kg),
         propellant,
-    ))
+    )
+    .map_err(|e| anyhow::anyhow!("Invalid custom engine: {e}"))
 }
 
 /// Parse propellant type from string.

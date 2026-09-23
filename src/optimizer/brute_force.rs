@@ -2,17 +2,18 @@
 //!
 //! The theory is documented on the public type below, where rustdoc shows it.
 
-use std::io::{self, Write};
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use rayon::prelude::*;
 
-use crate::stage::{Rocket, Stage};
-use crate::units::Mass;
-
-use super::sizing::{size_for_propellant, StageEngine};
-use super::{AnalyticalOptimizer, OptimizeError, Optimizer, Problem, Solution};
+use super::sizing::{assemble, SizedStage, StageEngine};
+use super::{
+    AnalyticalOptimizer, Infeasibility, OptimizeError, Optimizer, OptimizerKind, Problem, Progress,
+    Solution,
+};
 
 /// Default propellant grid, as multiples of the payload mass.
 const DEFAULT_MIN_PROPELLANT_PER_PAYLOAD: f64 = 0.05;
@@ -54,27 +55,21 @@ const COARSE_ATTEMPTS: u32 = 4;
 /// # Example
 ///
 /// ```
-/// use tsiolkovsky::optimizer::{BruteForceOptimizer, Problem, Constraints, Optimizer};
-/// use tsiolkovsky::engine::EngineDatabase;
-/// use tsiolkovsky::units::{Mass, Velocity};
+/// use tsiolkovsky::prelude::*;
 ///
-/// let db = EngineDatabase::load_embedded().expect("failed to load database");
-/// let raptor = db.get("raptor-2").expect("engine not found");
-/// let merlin = db.get("merlin-1d").expect("engine not found");
+/// let db = EngineDatabase::builtin();
+/// let problem = Problem::builder()
+///     .payload(Mass::tonnes(5.0))
+///     .target(Velocity::mps(9_400.0))
+///     .engines([db.get("raptor-2").unwrap().clone(), db.get("merlin-1d").unwrap().clone()])
+///     .stages(2)
+///     .build()?;
 ///
-/// let problem = Problem::new(
-///     Mass::kg(5_000.0),
-///     Velocity::mps(9_400.0),
-///     vec![raptor.clone(), merlin.clone()],
-///     Constraints::default(),
-/// ).with_stage_count(2);
-///
-/// let optimizer = BruteForceOptimizer::default().with_progress(false);
-/// let solution = optimizer.optimize(&problem).expect("optimization failed");
-///
+/// let solution = BruteForceOptimizer::default().optimize(&problem)?;
 /// assert!(solution.meets_target());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BruteForceOptimizer {
     /// Propellant grid points per stage in the coarse search
     coarse_steps: u32,
@@ -84,8 +79,20 @@ pub struct BruteForceOptimizer {
     refine_rounds: u32,
     /// Explicit propellant bounds in kg; `None` scales them to the payload
     propellant_bounds: Option<(f64, f64)>,
-    /// Show progress indicator
-    show_progress: bool,
+    /// Who to tell how the search is going
+    progress: Option<Arc<dyn Progress>>,
+}
+
+impl fmt::Debug for BruteForceOptimizer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BruteForceOptimizer")
+            .field("coarse_steps", &self.coarse_steps)
+            .field("fine_steps", &self.fine_steps)
+            .field("refine_rounds", &self.refine_rounds)
+            .field("propellant_bounds", &self.propellant_bounds)
+            .field("progress", &self.progress.is_some())
+            .finish()
+    }
 }
 
 impl Default for BruteForceOptimizer {
@@ -95,7 +102,7 @@ impl Default for BruteForceOptimizer {
             fine_steps: 11,
             refine_rounds: 8,
             propellant_bounds: None,
-            show_progress: true,
+            progress: None,
         }
     }
 }
@@ -110,23 +117,13 @@ impl BruteForceOptimizer {
             coarse_steps: propellant_steps.max(1),
             fine_steps: propellant_steps / 2 + 1,
             propellant_bounds: Some((min_propellant_kg, max_propellant_kg)),
-            show_progress: false,
             ..Self::default()
         }
     }
 
-    /// Enable or disable progress indicator.
-    pub fn with_progress(mut self, show: bool) -> Self {
-        self.show_progress = show;
-        self
-    }
-
-    /// Formerly limited upper stages to high-Isp engines.
-    ///
-    /// The search now tries every engine on every stage, so the best upper
-    /// stage engine is found without being told. This has no effect.
-    #[deprecated(since = "0.7.0", note = "every engine is now searched on every stage")]
-    pub fn with_vacuum_preference(self, _prefer: bool) -> Self {
+    /// Report progress of the coarse search to `progress`.
+    pub fn with_progress(mut self, progress: impl Progress + 'static) -> Self {
+        self.progress = Some(Arc::new(progress));
         self
     }
 
@@ -151,7 +148,7 @@ impl BruteForceOptimizer {
         engines: &[Vec<StageEngine<'_>>],
         grids: &[Vec<f64>],
         counter: &AtomicU64,
-        progress: Option<&Progress>,
+        progress: Option<&dyn Progress>,
     ) -> Option<(f64, Vec<Choice>)> {
         let n = engines.len();
         let top = n - 1;
@@ -159,24 +156,25 @@ impl BruteForceOptimizer {
             .flat_map(|e| grids[top].iter().map(move |&p| (e, p)))
             .collect();
         let design_dv = problem.design_delta_v().as_mps();
+        let booster_floor = problem.constraints().booster_delta_v_floor(n).as_mps();
+        let done = AtomicU64::new(0);
 
         top_choices
             .into_par_iter()
             .filter_map(|(e, p)| {
                 let mut walk = Walk {
-                    problem,
                     engines,
                     grids,
                     design_dv,
-                    booster_floor: problem.constraints.booster_delta_v_floor(n).as_mps(),
+                    booster_floor,
                     path: Vec::with_capacity(n),
                     best: None,
                     evaluated: 0,
                 };
-                walk.stage(top, e, p, problem.payload.as_kg(), 0.0);
+                walk.stage(top, e, p, problem.payload().as_kg(), 0.0);
                 counter.fetch_add(walk.evaluated, Ordering::Relaxed);
                 if let Some(progress) = progress {
-                    progress.tick();
+                    progress.advance(done.fetch_add(1, Ordering::Relaxed) + 1);
                 }
                 walk.best
             })
@@ -188,13 +186,11 @@ impl BruteForceOptimizer {
 #[derive(Debug, Clone, Copy)]
 struct Choice {
     engine: usize,
-    count: u32,
-    propellant: f64,
+    sized: SizedStage,
 }
 
 /// Depth-first walk of the grid below one top-stage choice.
 struct Walk<'a, 'e> {
-    problem: &'a Problem,
     engines: &'a [Vec<StageEngine<'e>>],
     grids: &'a [Vec<f64>],
     design_dv: f64,
@@ -208,35 +204,21 @@ struct Walk<'a, 'e> {
 
 impl Walk<'_, '_> {
     fn stage(&mut self, index: usize, engine: usize, propellant: f64, above: f64, dv: f64) {
-        let constraints = &self.problem.constraints;
-        let Ok((sized, stage_dv)) = size_for_propellant(
-            &self.engines[index][engine],
-            propellant,
-            above,
-            constraints.structural_ratio.as_f64(),
-            constraints.surface_gravity,
-            constraints.max_engines_per_stage,
-        ) else {
+        let Ok((sized, stage_dv)) =
+            self.engines[index][engine].size_for_propellant(propellant, above)
+        else {
             self.evaluated += 1;
             return;
         };
-        self.path.push(Choice {
-            engine,
-            count: sized.engine_count,
-            propellant,
-        });
+        self.path.push(Choice { engine, sized });
         let dv = dv + stage_dv;
         if index == 0 {
             self.evaluated += 1;
-            if stage_dv < self.booster_floor {
-                self.path.pop();
-                return;
-            }
             let lighter = self
                 .best
                 .as_ref()
                 .is_none_or(|(mass, _)| sized.stack_mass < *mass);
-            if dv >= self.design_dv && lighter {
+            if stage_dv >= self.booster_floor && dv >= self.design_dv && lighter {
                 let mut stages = self.path.clone();
                 stages.reverse();
                 self.best = Some((sized.stack_mass, stages));
@@ -254,29 +236,11 @@ impl Walk<'_, '_> {
     }
 }
 
-/// Progress reporting to stderr.
-struct Progress {
-    done: AtomicU64,
-    total: u64,
-}
-
-impl Progress {
-    fn tick(&self) {
-        let done = self.done.fetch_add(1, Ordering::Relaxed) + 1;
-        if done.is_multiple_of((self.total / 100).max(1)) || done == self.total {
-            let percent = done as f64 / self.total as f64 * 100.0;
-            eprint!("\r  Searching... {percent:.0}%");
-            let _ = io::stderr().flush();
-        }
-    }
-}
-
 impl Optimizer for BruteForceOptimizer {
     fn optimize(&self, problem: &Problem) -> Result<Solution, OptimizeError> {
         let start = Instant::now();
-        problem.is_valid()?;
 
-        let payload = problem.payload.as_kg();
+        let payload = problem.payload().as_kg();
         let (min_p, max_p) = self.propellant_bounds.unwrap_or((
             payload * DEFAULT_MIN_PROPELLANT_PER_PAYLOAD,
             payload * DEFAULT_MAX_PROPELLANT_PER_PAYLOAD,
@@ -284,10 +248,7 @@ impl Optimizer for BruteForceOptimizer {
         let (min_stages, max_stages) = problem.stage_count_range();
         let counter = AtomicU64::new(0);
         let mut best: Option<(f64, Vec<Choice>, Vec<Vec<StageEngine>>)> = None;
-
-        if self.show_progress {
-            eprintln!("  Optimizer: BruteForce (parallel)");
-        }
+        let progress = self.progress.as_deref();
 
         for stage_count in min_stages..=max_stages {
             let engines: Vec<Vec<StageEngine>> = (0..stage_count as usize)
@@ -316,16 +277,16 @@ impl Optimizer for BruteForceOptimizer {
                     coarse_ratio = coarse[1] / coarse[0];
                 }
                 let grids = vec![coarse.clone(); stage_count as usize];
-                let progress = self.show_progress.then(|| {
-                    eprintln!("  Coarse search: {stage_count} stage(s), {steps} steps");
-                    Progress {
-                        done: AtomicU64::new(0),
-                        total: (engines[stage_count as usize - 1].len() * coarse.len()) as u64,
-                    }
-                });
-                found = self.search_grid(problem, &engines, &grids, &counter, progress.as_ref());
-                if self.show_progress {
-                    eprintln!();
+                if let Some(p) = progress {
+                    let total = (engines[stage_count as usize - 1].len() * coarse.len()) as u64;
+                    p.start(
+                        &format!("Coarse search: {stage_count} stage(s), {steps} steps"),
+                        total,
+                    );
+                }
+                found = self.search_grid(problem, &engines, &grids, &counter, progress);
+                if let Some(p) = progress {
+                    p.finish();
                 }
                 if found.is_some() {
                     break;
@@ -343,7 +304,8 @@ impl Optimizer for BruteForceOptimizer {
                 let grids: Vec<Vec<f64>> = choices
                     .iter()
                     .map(|c| {
-                        Self::log_grid(self.fine_steps, c.propellant / span, c.propellant * span)
+                        let p = c.sized.propellant;
+                        Self::log_grid(self.fine_steps, p / span, p * span)
                     })
                     .collect();
                 if let Some((m, c)) = self.search_grid(problem, &engines, &grids, &counter, None) {
@@ -367,41 +329,25 @@ impl Optimizer for BruteForceOptimizer {
             // binds, or a design exists and the grid stepped over it.
             return Err(match AnalyticalOptimizer.optimize(problem) {
                 Err(e) => e,
-                Ok(found) => OptimizeError::Infeasible {
-                    reason: format!(
-                        "The brute force grid found nothing after {iterations} evaluations, \
-                        but a {:.0} kg design exists.\n\n\
-                        Suggestions:\n  \
-                        - Use --optimizer analytical\n  \
-                        - Use a finer grid (BruteForceOptimizer::new)",
-                        found.rocket.total_mass().as_kg()
-                    ),
-                },
+                Ok(found) => OptimizeError::Infeasible(Infeasibility::SearchMissed {
+                    evaluations: iterations,
+                    known_mass: found.rocket().total_mass(),
+                }),
             });
         };
 
-        let tankage = problem.constraints.structural_ratio.as_f64();
         let stages = choices
             .iter()
             .enumerate()
-            .map(|(i, c)| {
-                Stage::with_structural_ratio(
-                    engines[i][c.engine].engine.clone(),
-                    c.count,
-                    Mass::kg(c.propellant),
-                    tankage,
-                )
-            })
+            .map(|(i, c)| engines[i][c.engine].build(&c.sized))
             .collect();
-        let rocket =
-            Rocket::new(stages, problem.payload).with_booster_isp(problem.constraints.booster_isp);
 
-        Ok(Solution::with_metadata(
-            rocket,
-            problem.target_delta_v,
+        Ok(Solution::new(
+            assemble(problem, stages),
+            problem.target_delta_v(),
             iterations,
             start.elapsed(),
-            "BruteForce",
+            OptimizerKind::BruteForce,
         ))
     }
 }
@@ -411,49 +357,52 @@ mod tests {
     use super::*;
     use crate::engine::{Engine, EngineDatabase};
     use crate::optimizer::{AnalyticalOptimizer, Constraints};
-    use crate::units::{Ratio, Velocity};
+    use crate::units::{Mass, Ratio, Velocity};
 
     fn get(name: &str) -> Engine {
         EngineDatabase::default().get(name).unwrap().clone()
     }
 
     fn quiet() -> BruteForceOptimizer {
-        BruteForceOptimizer::default().with_progress(false)
+        BruteForceOptimizer::default()
     }
 
     #[test]
     fn brute_force_single_engine() {
         let optimizer = BruteForceOptimizer::new(5, 50_000.0, 500_000.0);
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = optimizer.optimize(&problem).unwrap();
 
         assert!(solution.meets_target());
-        assert_eq!(solution.rocket.stage_count(), 2);
-        assert!(solution.iterations > 0);
-        assert_eq!(solution.optimizer_name, "BruteForce");
+        assert_eq!(solution.rocket().stage_count(), 2);
+        assert!(solution.iterations() > 0);
+        assert_eq!(solution.optimizer().to_string(), "BruteForce");
     }
 
     #[test]
     fn brute_force_multi_engine() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![get("raptor-2"), get("merlin-1d")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(get("raptor-2"))
+            .engine(get("merlin-1d"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
 
         assert!(solution.meets_target());
-        assert_eq!(solution.rocket.stage_count(), 2);
+        assert_eq!(solution.rocket().stage_count(), 2);
     }
 
     #[test]
@@ -461,45 +410,52 @@ mod tests {
         // 1 engine, 3 grid points, 2 stages: the coarse pass alone evaluates
         // 3 × 3 = 9 configurations, and refinement adds more.
         let optimizer = BruteForceOptimizer::new(3, 20_000.0, 300_000.0);
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(8_000.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(8_000.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = optimizer.optimize(&problem).unwrap();
-        assert!(solution.iterations > 9, "{}", solution.iterations);
+        assert!(solution.iterations() > 9, "{}", solution.iterations());
     }
 
     #[test]
     fn brute_force_respects_twr() {
-        let constraints = Constraints::new(Ratio::new(1.3), Ratio::new(0.7), 2, Ratio::new(0.08));
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![get("raptor-2")],
-            constraints,
-        )
-        .with_stage_count(2);
+        let constraints = Constraints::default()
+            .with_min_liftoff_twr(Ratio::new(1.3))
+            .with_min_stage_twr(Ratio::new(0.7))
+            .with_max_stages(2)
+            .with_structural_ratio(Ratio::new(0.08));
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(get("raptor-2"))
+            .constraints(constraints)
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
 
-        assert!(solution.rocket.liftoff_twr().as_f64() >= 1.3);
-        assert!(solution.rocket.stage_twr(1).as_f64() >= 0.7);
+        assert!(solution.rocket().liftoff_twr().as_f64() >= 1.3);
+        assert!(solution.rocket().stage_twr(1).as_f64() >= 0.7);
     }
 
     #[test]
     fn brute_force_infeasible_returns_error() {
         let optimizer = BruteForceOptimizer::new(3, 1_000.0, 10_000.0);
-        let problem = Problem::new(
-            Mass::kg(100_000.0),
-            Velocity::mps(15_000.0),
-            vec![get("merlin-1d")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(100_000.0))
+            .target(Velocity::mps(15_000.0))
+            .engine(get("merlin-1d"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let result = optimizer.optimize(&problem);
 
@@ -508,79 +464,88 @@ mod tests {
 
     #[test]
     fn brute_force_stage_count_exploration() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(8_000.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        );
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(8_000.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
 
         assert!(solution.meets_target());
-        assert!((1..=3).contains(&solution.rocket.stage_count()));
+        assert!((1..=3).contains(&solution.rocket().stage_count()));
     }
 
     #[test]
     fn finds_hydrogen_upper_stage_without_being_told() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_000.0),
-            vec![get("raptor-2"), get("raptor-vacuum")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_000.0))
+            .engine(get("raptor-2"))
+            .engine(get("raptor-vacuum"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
-        assert_eq!(solution.rocket.stages()[0].engine().name, "Raptor-2");
-        assert_eq!(solution.rocket.stages()[1].engine().name, "Raptor-Vacuum");
+        assert_eq!(solution.rocket().stages()[0].engine().name(), "Raptor-2");
+        assert_eq!(
+            solution.rocket().stages()[1].engine().name(),
+            "Raptor-Vacuum"
+        );
     }
 
     #[test]
     fn finds_small_rockets() {
         // v0.6 had a fixed 10 t propellant floor and called this infeasible.
-        let problem = Problem::new(
-            Mass::kg(300.0),
-            Velocity::mps(9_400.0),
-            vec![get("rutherford")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(300.0))
+            .target(Velocity::mps(9_400.0))
+            .engine(get("rutherford"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
         assert!(solution.meets_target());
-        assert!(solution.rocket.total_mass().as_kg() < 30_000.0);
+        assert!(solution.rocket().total_mass().as_kg() < 30_000.0);
     }
 
     #[test]
     fn super_heavy_engine_counts_are_expressible() {
         // 100 t to a Starship-class orbit needs dozens of Raptors on the booster.
-        let problem = Problem::new(
-            Mass::kg(100_000.0),
-            Velocity::mps(9_400.0),
-            vec![get("raptor-2")],
-            Constraints::default().with_max_engines(40),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(100_000.0))
+            .target(Velocity::mps(9_400.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default().with_max_engines(40))
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = quiet().optimize(&problem).unwrap();
-        assert!(solution.rocket.stages()[0].engine_count() > 9);
+        assert!(solution.rocket().stages()[0].engine_count() > 9);
     }
 
     #[test]
     fn agrees_with_analytical() {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(9_400.0),
-            vec![get("raptor-2")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(9_400.0))
+            .engine(get("raptor-2"))
+            .constraints(Constraints::default())
+            .stages(2)
+            .build()
+            .unwrap();
 
         let brute = quiet().optimize(&problem).unwrap();
         let analytical = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let b = brute.rocket.total_mass().as_kg();
-        let a = analytical.rocket.total_mass().as_kg();
+        let b = brute.rocket().total_mass().as_kg();
+        let a = analytical.rocket().total_mass().as_kg();
         assert!(a <= b * 1.001, "analytical {a:.0} vs brute force {b:.0}");
         assert!(b <= a * 1.01, "brute force {b:.0} vs analytical {a:.0}");
     }

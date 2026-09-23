@@ -286,7 +286,7 @@ fn optimal_staging_equal_dv_theory() {
 fn stage(engine: &str, count: u32, propellant_kg: f64, dry_kg: f64) -> Stage {
     let engine = EngineDatabase::default().get(engine).unwrap().clone();
     let structure = dry_kg - engine.dry_mass().as_kg() * count as f64;
-    Stage::new(engine, count, Mass::kg(propellant_kg), Mass::kg(structure))
+    Stage::new(engine, count, Mass::kg(propellant_kg), Mass::kg(structure)).unwrap()
 }
 
 /// Falcon 9 Block 5, expendable, with its 22.8 t LEO payload.
@@ -298,6 +298,7 @@ fn falcon_9() -> Rocket {
         ],
         Mass::kg(22_800.0),
     )
+    .unwrap()
 }
 
 /// Saturn V (Apollo 11) with ~45 t of spacecraft to trans-lunar injection.
@@ -312,24 +313,31 @@ fn saturn_v() -> Rocket {
         ],
         Mass::kg(45_000.0),
     )
+    .unwrap()
 }
 
 /// Ask the optimizer to design a rocket that does the real vehicle's job,
 /// with the real vehicle's engines on each stage.
 fn redesign(real: &Rocket, structural_ratio: f64, min_twr: (f64, f64)) -> Rocket {
     let (min_liftoff_twr, min_upper_twr) = min_twr;
-    let constraints = Constraints::new(
-        Ratio::new(min_liftoff_twr),
-        Ratio::new(min_upper_twr),
-        real.stage_count() as u32,
-        Ratio::new(structural_ratio),
-    );
-    let mut problem = Problem::new(real.payload(), real.total_delta_v(), vec![], constraints)
-        .with_stage_count(real.stage_count() as u32);
+    let constraints = Constraints::default()
+        .with_min_liftoff_twr(min_liftoff_twr)
+        .with_min_stage_twr(min_upper_twr)
+        .with_max_stages(real.stage_count() as u32)
+        .with_structural_ratio(structural_ratio);
+    let mut builder = Problem::builder()
+        .payload(real.payload())
+        .target(real.total_delta_v())
+        .constraints(constraints)
+        .stages(real.stage_count() as u32);
     for (i, s) in real.stages().iter().enumerate() {
-        problem = problem.with_pinned_engine(i, s.engine().clone());
+        builder = builder.pin(i, s.engine().clone());
     }
-    AnalyticalOptimizer.optimize(&problem).unwrap().rocket
+    let problem = builder.build().unwrap();
+    AnalyticalOptimizer
+        .optimize(&problem)
+        .unwrap()
+        .into_rocket()
 }
 
 // ============================================================================
@@ -415,19 +423,23 @@ fn optimizer_equal_dv_split() {
         Isp::seconds(350.0),
         Mass::kg(0.001),
         Propellant::LoxCh4,
-    );
-    let problem = Problem::new(
-        Mass::kg(5_000.0),
-        Velocity::mps(9_000.0),
-        vec![feather],
-        Constraints::default()
-            .with_booster_isp(IspModel::Vacuum)
-            .with_max_engines(100),
     )
-    .with_stage_count(2);
+    .unwrap();
+    let problem = Problem::builder()
+        .payload(Mass::kg(5_000.0))
+        .target(Velocity::mps(9_000.0))
+        .engine(feather)
+        .constraints(
+            Constraints::default()
+                .with_booster_isp(IspModel::Vacuum)
+                .with_max_engines(100),
+        )
+        .stages(2)
+        .build()
+        .unwrap();
 
     let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-    let rocket = &solution.rocket;
+    let rocket = &solution.rocket();
 
     let stage1_dv = rocket.stage_delta_v(0).as_mps();
     let stage2_dv = rocket.stage_delta_v(1).as_mps();
@@ -444,15 +456,19 @@ fn optimizer_shifts_delta_v_to_the_upper_stage() {
     let db = EngineDatabase::default();
     let raptor = db.get("raptor-2").unwrap();
 
-    let problem = Problem::new(
-        Mass::kg(5_000.0),
-        Velocity::mps(9_400.0),
-        vec![raptor.clone()],
-        Constraints::default(),
-    )
-    .with_stage_count(2);
+    let problem = Problem::builder()
+        .payload(Mass::kg(5_000.0))
+        .target(Velocity::mps(9_400.0))
+        .engine(raptor.clone())
+        .constraints(Constraints::default())
+        .stages(2)
+        .build()
+        .unwrap();
 
-    let rocket = AnalyticalOptimizer.optimize(&problem).unwrap().rocket;
+    let rocket = AnalyticalOptimizer
+        .optimize(&problem)
+        .unwrap()
+        .into_rocket();
     assert!(rocket.stage_delta_v(1).as_mps() > rocket.stage_delta_v(0).as_mps());
 }
 
@@ -465,16 +481,17 @@ fn optimizer_margin_is_explicit() {
     let target = 9_400.0;
 
     for margin in [0.0, 0.02, 0.05] {
-        let problem = Problem::new(
-            Mass::kg(5_000.0),
-            Velocity::mps(target),
-            vec![raptor.clone()],
-            Constraints::default().with_margin(Ratio::new(margin)),
-        )
-        .with_stage_count(2);
+        let problem = Problem::builder()
+            .payload(Mass::kg(5_000.0))
+            .target(Velocity::mps(target))
+            .engine(raptor.clone())
+            .constraints(Constraints::default().with_margin(Ratio::new(margin)))
+            .stages(2)
+            .build()
+            .unwrap();
 
         let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
-        let achieved = solution.rocket.total_delta_v().as_mps();
+        let achieved = solution.rocket().total_delta_v().as_mps();
         assert!(
             (achieved - target * (1.0 + margin)).abs() < 0.01,
             "margin {margin}: achieved {achieved:.3} m/s"
@@ -489,21 +506,26 @@ fn optimizer_respects_twr_constraints() {
     let raptor = db.get("raptor-2").unwrap();
 
     let min_twr = 1.3;
-    let constraints = Constraints::new(Ratio::new(min_twr), Ratio::new(0.7), 2, Ratio::new(0.08));
+    let constraints = Constraints::default()
+        .with_min_liftoff_twr(Ratio::new(min_twr))
+        .with_min_stage_twr(Ratio::new(0.7))
+        .with_max_stages(2)
+        .with_structural_ratio(Ratio::new(0.08));
 
-    let problem = Problem::new(
-        Mass::kg(10_000.0),
-        Velocity::mps(9_400.0),
-        vec![raptor.clone()],
-        constraints,
-    )
-    .with_stage_count(2);
+    let problem = Problem::builder()
+        .payload(Mass::kg(10_000.0))
+        .target(Velocity::mps(9_400.0))
+        .engine(raptor.clone())
+        .constraints(constraints)
+        .stages(2)
+        .build()
+        .unwrap();
 
     let optimizer = AnalyticalOptimizer;
     let solution = optimizer.optimize(&problem).unwrap();
 
     // First stage TWR must meet minimum
-    let stage1_twr = solution.rocket.stage_twr(0).as_f64();
+    let stage1_twr = solution.rocket().stage_twr(0).as_f64();
     assert!(
         stage1_twr >= min_twr,
         "Stage 1 TWR below minimum: {:.2} < {:.2}",
@@ -522,18 +544,22 @@ fn optimizer_reasonable_payload_fraction() {
     let raptor = db.get("raptor-2").unwrap();
 
     let payload = 5_000.0;
-    let problem = Problem::new(
-        Mass::kg(payload),
-        Velocity::mps(9_400.0), // LEO delta-v
-        vec![raptor.clone()],
-        Constraints::default(),
-    )
-    .with_stage_count(2);
+    let problem = Problem::builder()
+        .payload(Mass::kg(payload))
+        .target(Velocity::mps(9_400.0))
+        .engines(
+            // LEO delta-v
+            vec![raptor.clone()],
+        )
+        .constraints(Constraints::default())
+        .stages(2)
+        .build()
+        .unwrap();
 
     let optimizer = AnalyticalOptimizer;
     let solution = optimizer.optimize(&problem).unwrap();
 
-    let pf = solution.rocket.payload_fraction().as_f64() * 100.0;
+    let pf = solution.rocket().payload_fraction().as_f64() * 100.0;
 
     // Payload fraction should be in realistic range for LEO
     assert!(
@@ -550,29 +576,31 @@ fn optimizer_engine_comparison() {
     let raptor = db.get("raptor-2").unwrap();
     let merlin = db.get("merlin-1d").unwrap();
 
-    let problem_raptor = Problem::new(
-        Mass::kg(5_000.0),
-        Velocity::mps(9_000.0),
-        vec![raptor.clone()],
-        Constraints::default(),
-    )
-    .with_stage_count(2);
+    let problem_raptor = Problem::builder()
+        .payload(Mass::kg(5_000.0))
+        .target(Velocity::mps(9_000.0))
+        .engine(raptor.clone())
+        .constraints(Constraints::default())
+        .stages(2)
+        .build()
+        .unwrap();
 
-    let problem_merlin = Problem::new(
-        Mass::kg(5_000.0),
-        Velocity::mps(9_000.0),
-        vec![merlin.clone()],
-        Constraints::default(),
-    )
-    .with_stage_count(2);
+    let problem_merlin = Problem::builder()
+        .payload(Mass::kg(5_000.0))
+        .target(Velocity::mps(9_000.0))
+        .engine(merlin.clone())
+        .constraints(Constraints::default())
+        .stages(2)
+        .build()
+        .unwrap();
 
     let optimizer = AnalyticalOptimizer;
     let raptor_solution = optimizer.optimize(&problem_raptor).unwrap();
     let merlin_solution = optimizer.optimize(&problem_merlin).unwrap();
 
     // Raptor has higher Isp (350s vs 311s), so should have better payload fraction
-    let raptor_pf = raptor_solution.rocket.payload_fraction().as_f64();
-    let merlin_pf = merlin_solution.rocket.payload_fraction().as_f64();
+    let raptor_pf = raptor_solution.rocket().payload_fraction().as_f64();
+    let merlin_pf = merlin_solution.rocket().payload_fraction().as_f64();
 
     assert!(
         raptor_pf > merlin_pf,

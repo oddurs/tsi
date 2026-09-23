@@ -4,14 +4,15 @@
 //! catching edge cases that example-based tests might miss.
 
 use proptest::prelude::*;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use tsiolkovsky::engine::Propellant;
 use tsiolkovsky::engine::{Engine, EngineDatabase};
 use tsiolkovsky::optimizer::{
-    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer,
-    ParameterSampler, Problem, Solution, Uncertainty,
+    AnalyticalOptimizer, BruteForceOptimizer, Constraints, OptimizeError, Optimizer, Problem,
+    Solution, Uncertainty,
 };
 use tsiolkovsky::physics::{delta_v, required_mass_ratio};
+use tsiolkovsky::stage::{Rocket, Stage};
+use tsiolkovsky::units::Force;
 use tsiolkovsky::units::{Isp, Mass, Ratio, Velocity};
 
 proptest! {
@@ -125,28 +126,30 @@ fn engine(name: &str) -> Engine {
 }
 
 fn problem(engine_name: &str, payload: f64, dv: f64, eps: f64, stages: u32) -> Problem {
-    let mut constraints = Constraints::default().with_max_engines(20);
-    constraints.structural_ratio = Ratio::new(eps);
-    Problem::new(
-        Mass::kg(payload),
-        Velocity::mps(dv),
-        vec![engine(engine_name)],
-        constraints,
-    )
-    .with_stage_count(stages)
+    let constraints = Constraints::default()
+        .with_max_engines(20)
+        .with_structural_ratio(eps);
+    Problem::builder()
+        .payload(Mass::kg(payload))
+        .target(Velocity::mps(dv))
+        .engine(engine(engine_name))
+        .constraints(constraints)
+        .stages(stages)
+        .build()
+        .unwrap()
 }
 
 /// Optimize, treating "no rocket can do this" as a reason to skip the case.
 fn solve(problem: &Problem) -> Option<Solution> {
     match AnalyticalOptimizer.optimize(problem) {
         Ok(solution) => Some(solution),
-        Err(OptimizeError::Infeasible { .. }) => None,
+        Err(OptimizeError::Infeasible(_)) => None,
         Err(e) => panic!("unexpected error: {e}"),
     }
 }
 
 fn mass(solution: &Solution) -> f64 {
-    solution.rocket.total_mass().as_kg()
+    solution.rocket().total_mass().as_kg()
 }
 
 proptest! {
@@ -163,16 +166,16 @@ proptest! {
     ) {
         let problem = problem(engine_name, payload, dv, eps, stages);
         let Some(solution) = solve(&problem) else { return Ok(()) };
-        let rocket = &solution.rocket;
-        let c = &problem.constraints;
+        let rocket = &solution.rocket();
+        let c = problem.constraints();
 
-        prop_assert!(solution.meets_target(), "margin {}", solution.margin);
-        prop_assert!(rocket.liftoff_twr().as_f64() >= c.min_liftoff_twr.as_f64() * (1.0 - 1e-9));
+        prop_assert!(solution.meets_target(), "margin {}", solution.margin());
+        prop_assert!(rocket.liftoff_twr().as_f64() >= c.min_liftoff_twr().as_f64() * (1.0 - 1e-9));
         for i in 1..rocket.stage_count() {
-            prop_assert!(rocket.stage_twr(i).as_f64() >= c.min_stage_twr.as_f64() * (1.0 - 1e-9));
+            prop_assert!(rocket.stage_twr(i).as_f64() >= c.min_stage_twr().as_f64() * (1.0 - 1e-9));
         }
         for stage in rocket.stages() {
-            prop_assert!(stage.engine_count() <= c.max_engines_per_stage);
+            prop_assert!(stage.engine_count() <= c.max_engines_per_stage());
         }
     }
 
@@ -203,28 +206,8 @@ proptest! {
         let (Some(a), Some(b)) = (solve(&easy), solve(&hard)) else { return Ok(()) };
         prop_assert!(mass(&b) > mass(&a));
         prop_assert!(
-            b.rocket.payload_fraction().as_f64() < a.rocket.payload_fraction().as_f64()
+            b.rocket().payload_fraction().as_f64() < a.rocket().payload_fraction().as_f64()
         );
-    }
-
-    /// A perturbed engine is never better at sea level than in vacuum: its
-    /// sea-level and vacuum values move together.
-    #[test]
-    fn perturbed_isp_sl_never_exceeds_vacuum(
-        engine_name in prop::sample::select(BOOSTER_ENGINES.to_vec()),
-        isp_percent in 0.0..10.0_f64,
-        thrust_percent in 0.0..10.0_f64,
-        seed in any::<u64>(),
-    ) {
-        let sampler = ParameterSampler::new(Uncertainty {
-            isp_percent,
-            thrust_percent,
-            structural_percent: 0.0,
-        });
-        let mut rng = StdRng::seed_from_u64(seed);
-        let perturbed = sampler.perturb_engine_with_rng(&engine(engine_name), &mut rng);
-        prop_assert!(perturbed.isp_sl().as_seconds() <= perturbed.isp_vac().as_seconds());
-        prop_assert!(perturbed.thrust_sl().as_newtons() <= perturbed.thrust_vac().as_newtons());
     }
 
     /// Validation catches every non-finite or non-positive input, and
@@ -234,19 +217,70 @@ proptest! {
         payload in prop::num::f64::ANY,
         dv in prop::num::f64::ANY,
     ) {
-        let problem = Problem::new(
-            Mass::kg(payload),
-            Velocity::mps(dv),
-            vec![engine("raptor-2")],
-            Constraints::default(),
-        )
-        .with_stage_count(2);
+        let built = Problem::builder()
+            .payload(Mass::kg(payload))
+            .target(Velocity::mps(dv))
+            .engine(engine("raptor-2"))
+            .stages(2)
+            .build();
         let sane = payload.is_finite() && payload > 0.0 && dv.is_finite() && dv > 0.0;
-        prop_assert_eq!(problem.is_valid().is_ok(), sane);
-        if let Ok(solution) = AnalyticalOptimizer.optimize(&problem) {
-            prop_assert!(mass(&solution).is_finite());
-            prop_assert!(solution.rocket.total_delta_v().as_mps().is_finite());
+        prop_assert_eq!(built.is_ok(), sane);
+        if let Ok(problem) = built {
+            if let Ok(solution) = AnalyticalOptimizer.optimize(&problem) {
+                prop_assert!(mass(&solution).is_finite());
+                prop_assert!(solution.rocket().total_delta_v().as_mps().is_finite());
+            }
         }
+    }
+
+    /// Every public constructor either builds something physical or says
+    /// why not. None of them panic, whatever numbers they are given.
+    #[test]
+    fn constructors_never_panic(
+        a in prop::num::f64::ANY,
+        b in prop::num::f64::ANY,
+        c in prop::num::f64::ANY,
+        d in prop::num::f64::ANY,
+        e in prop::num::f64::ANY,
+        count in 0u32..40,
+    ) {
+        let engine = Engine::new(
+            "Fuzz",
+            Force::newtons(a),
+            Force::newtons(b),
+            Isp::seconds(c),
+            Isp::seconds(d),
+            Mass::kg(e),
+            Propellant::LoxCh4,
+        );
+        if let Ok(engine) = &engine {
+            prop_assert!(engine.isp_sl().as_seconds() <= engine.isp_vac().as_seconds());
+            prop_assert!(engine.dry_mass().as_kg() > 0.0);
+        }
+        let engine = engine.unwrap_or_else(|_| self::engine("raptor-2"));
+
+        let stage = Stage::new(engine.clone(), count, Mass::kg(a), Mass::kg(b));
+        let _ = Stage::with_structural_ratio(engine.clone(), count, Mass::kg(c), d);
+        let rocket = stage.ok().map(|s| Rocket::new(vec![s], Mass::kg(e)));
+        if let Some(Ok(rocket)) = rocket {
+            prop_assert!(rocket.total_mass().as_kg().is_finite());
+            let _ = rocket.total_delta_v();
+            let _ = rocket.liftoff_twr();
+        }
+
+        let _ = Problem::builder()
+            .payload(Mass::kg(a))
+            .target(Velocity::mps(b))
+            .engine(engine)
+            .constraints(
+                Constraints::default()
+                    .with_min_liftoff_twr(c)
+                    .with_structural_ratio(d)
+                    .with_margin(e)
+                    .with_surface_gravity(a),
+            )
+            .build();
+        let _ = Uncertainty::default().with_isp_percent(a).validate();
     }
 }
 
@@ -266,7 +300,7 @@ proptest! {
         let problem = problem(engine_name, payload, dv, 0.08, 2);
         let Some(analytical) = solve(&problem) else { return Ok(()) };
         let brute = BruteForceOptimizer::default()
-            .with_progress(false)
+
             .optimize(&problem)
             .expect("brute force should find what analytical found");
         let (a, b) = (mass(&analytical), mass(&brute));

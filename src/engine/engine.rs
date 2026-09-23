@@ -30,6 +30,14 @@ use super::Propellant;
 /// Example: Merlin-1D produces 845 kN / 282s Isp at sea level,
 /// but 914 kN / 311s Isp in vacuum - about 8-10% improvement.
 ///
+/// # Validation
+///
+/// Every engine is checked when it is made, whether by [`Engine::new`] or by
+/// loading a database: masses, thrusts and Isps must be positive and finite,
+/// and an engine can't do better at sea level than in vacuum. An engine with
+/// no sea-level rating (zero sea-level thrust and Isp) is an upper-stage
+/// engine.
+///
 /// # Examples
 ///
 /// ```
@@ -44,43 +52,137 @@ use super::Propellant;
 ///     Isp::seconds(311.0),         // Vacuum Isp
 ///     Mass::kg(470.0),             // Engine dry mass
 ///     Propellant::LoxRp1,
-/// );
+/// )
+/// .expect("a physically possible engine");
 ///
 /// assert_eq!(merlin.isp_vac().as_seconds(), 311.0);
+///
+/// // An engine that beats its own vacuum Isp at sea level is rejected
+/// let impossible = Engine::new(
+///     "Perpetuum",
+///     Force::kilonewtons(900.0),
+///     Force::kilonewtons(900.0),
+///     Isp::seconds(400.0),
+///     Isp::seconds(300.0),
+///     Mass::kg(500.0),
+///     Propellant::LoxRp1,
+/// );
+/// assert!(impossible.is_err());
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "EngineSpec", into = "EngineSpec")]
 pub struct Engine {
-    /// Engine name (e.g., "Merlin-1D", "Raptor-2")
-    pub name: String,
-
-    /// Sea level thrust in Newtons (stored as raw f64 for serde)
-    #[serde(rename = "thrust_sl")]
+    name: String,
     thrust_sl_n: f64,
-
-    /// Vacuum thrust in Newtons
-    #[serde(rename = "thrust_vac")]
     thrust_vac_n: f64,
-
-    /// Sea level specific impulse in seconds
-    #[serde(rename = "isp_sl")]
     isp_sl_s: f64,
-
-    /// Vacuum specific impulse in seconds
-    #[serde(rename = "isp_vac")]
     isp_vac_s: f64,
-
-    /// Dry mass of the engine in kg
-    #[serde(rename = "dry_mass")]
     dry_mass_kg: f64,
+    propellant: Propellant,
+}
 
-    /// Propellant type used by this engine
-    pub propellant: Propellant,
+/// An engine as written in a TOML database or JSON: plain numbers in SI units.
+#[derive(Serialize, Deserialize)]
+struct EngineSpec {
+    name: String,
+    /// Sea level thrust in N (0 for vacuum-only engines)
+    thrust_sl: f64,
+    /// Vacuum thrust in N
+    thrust_vac: f64,
+    /// Sea level Isp in s (0 for vacuum-only engines)
+    isp_sl: f64,
+    /// Vacuum Isp in s
+    isp_vac: f64,
+    /// Dry mass in kg
+    dry_mass: f64,
+    propellant: Propellant,
+}
+
+impl TryFrom<EngineSpec> for Engine {
+    type Error = EngineError;
+
+    fn try_from(spec: EngineSpec) -> Result<Self, Self::Error> {
+        Engine::new(
+            spec.name,
+            Force::newtons(spec.thrust_sl),
+            Force::newtons(spec.thrust_vac),
+            Isp::seconds(spec.isp_sl),
+            Isp::seconds(spec.isp_vac),
+            Mass::kg(spec.dry_mass),
+            spec.propellant,
+        )
+    }
+}
+
+impl From<Engine> for EngineSpec {
+    fn from(e: Engine) -> Self {
+        EngineSpec {
+            name: e.name,
+            thrust_sl: e.thrust_sl_n,
+            thrust_vac: e.thrust_vac_n,
+            isp_sl: e.isp_sl_s,
+            isp_vac: e.isp_vac_s,
+            dry_mass: e.dry_mass_kg,
+            propellant: e.propellant,
+        }
+    }
+}
+
+/// Why an engine's data is physically impossible.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum EngineError {
+    /// The engine has no name.
+    #[error("engine name is empty")]
+    EmptyName,
+
+    /// A quantity that must be positive and finite isn't.
+    #[error("{engine}: {quantity} must be a positive number, got {value}")]
+    NotPositive {
+        engine: String,
+        quantity: &'static str,
+        value: f64,
+    },
+
+    /// A sea-level figure is negative or not a number.
+    #[error("{engine}: {quantity} must be zero (no sea-level rating) or positive, got {value}")]
+    InvalidSeaLevel {
+        engine: String,
+        quantity: &'static str,
+        value: f64,
+    },
+
+    /// The engine does better at sea level than in vacuum.
+    #[error(
+        "{engine}: sea-level {quantity} ({sea_level}) exceeds vacuum ({vacuum}); \
+        air pressure can only reduce an engine's performance"
+    )]
+    SeaLevelExceedsVacuum {
+        engine: String,
+        quantity: &'static str,
+        sea_level: f64,
+        vacuum: f64,
+    },
+
+    /// Only one of sea-level thrust and Isp is given.
+    #[error(
+        "{engine}: give both sea-level thrust and Isp, or neither (for a \
+        vacuum-only engine)"
+    )]
+    PartialSeaLevelRating { engine: String },
 }
 
 impl Engine {
-    /// Create a new engine with the given parameters.
+    /// Create a new engine, checking that its data is physically possible.
     ///
     /// For upper-stage-only engines (like RL-10), set sea level values to zero.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError`] for an empty name, a non-positive or
+    /// non-finite vacuum thrust, vacuum Isp or dry mass, a negative sea-level
+    /// value, sea-level performance better than vacuum, or a sea-level rating
+    /// with only one of thrust and Isp.
     pub fn new(
         name: impl Into<String>,
         thrust_sl: Force,
@@ -89,16 +191,91 @@ impl Engine {
         isp_vac: Isp,
         dry_mass: Mass,
         propellant: Propellant,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            thrust_sl_n: thrust_sl.as_newtons(),
-            thrust_vac_n: thrust_vac.as_newtons(),
-            isp_sl_s: isp_sl.as_seconds(),
-            isp_vac_s: isp_vac.as_seconds(),
-            dry_mass_kg: dry_mass.as_kg(),
-            propellant,
+    ) -> Result<Self, EngineError> {
+        let name = name.into();
+        if name.trim().is_empty() {
+            return Err(EngineError::EmptyName);
         }
+        let positive = |quantity: &'static str, value: f64| {
+            if value.is_finite() && value > 0.0 {
+                Ok(value)
+            } else {
+                Err(EngineError::NotPositive {
+                    engine: name.clone(),
+                    quantity,
+                    value,
+                })
+            }
+        };
+        let sea_level = |quantity: &'static str, value: f64| {
+            if value.is_finite() && value >= 0.0 {
+                Ok(value)
+            } else {
+                Err(EngineError::InvalidSeaLevel {
+                    engine: name.clone(),
+                    quantity,
+                    value,
+                })
+            }
+        };
+        let thrust_vac_n = positive("vacuum thrust", thrust_vac.as_newtons())?;
+        let isp_vac_s = positive("vacuum Isp", isp_vac.as_seconds())?;
+        let dry_mass_kg = positive("dry mass", dry_mass.as_kg())?;
+        let thrust_sl_n = sea_level("sea-level thrust", thrust_sl.as_newtons())?;
+        let isp_sl_s = sea_level("sea-level Isp", isp_sl.as_seconds())?;
+
+        if (thrust_sl_n == 0.0) != (isp_sl_s == 0.0) {
+            return Err(EngineError::PartialSeaLevelRating { engine: name });
+        }
+        for (quantity, sl, vac) in [
+            ("thrust", thrust_sl_n, thrust_vac_n),
+            ("Isp", isp_sl_s, isp_vac_s),
+        ] {
+            if sl > vac {
+                return Err(EngineError::SeaLevelExceedsVacuum {
+                    engine: name,
+                    quantity,
+                    sea_level: sl,
+                    vacuum: vac,
+                });
+            }
+        }
+
+        Ok(Self {
+            name,
+            thrust_sl_n,
+            thrust_vac_n,
+            isp_sl_s,
+            isp_vac_s,
+            dry_mass_kg,
+            propellant,
+        })
+    }
+
+    /// The same engine with its Isp and thrust scaled, for Monte Carlo
+    /// analysis. Sea-level and vacuum values scale together, so a valid engine
+    /// stays valid for any positive factors.
+    pub(crate) fn scaled(&self, isp_factor: f64, thrust_factor: f64) -> Engine {
+        debug_assert!(isp_factor > 0.0 && thrust_factor > 0.0);
+        Engine {
+            name: self.name.clone(),
+            thrust_sl_n: self.thrust_sl_n * thrust_factor,
+            thrust_vac_n: self.thrust_vac_n * thrust_factor,
+            isp_sl_s: self.isp_sl_s * isp_factor,
+            isp_vac_s: self.isp_vac_s * isp_factor,
+            dry_mass_kg: self.dry_mass_kg,
+            propellant: self.propellant,
+        }
+    }
+
+    /// Engine name, e.g. "Merlin-1D".
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Propellant combination this engine burns.
+    pub fn propellant(&self) -> Propellant {
+        self.propellant
     }
 
     /// Sea level thrust.
@@ -238,18 +415,19 @@ mod tests {
             Mass::kg(470.0),
             Propellant::LoxRp1,
         )
+        .unwrap()
     }
 
     #[test]
     fn engine_accessors() {
         let e = merlin_1d();
-        assert_eq!(e.name, "Merlin-1D");
+        assert_eq!(e.name(), "Merlin-1D");
         assert_eq!(e.thrust_sl().as_newtons(), 845_000.0);
         assert_eq!(e.thrust_vac().as_newtons(), 914_000.0);
         assert_eq!(e.isp_sl().as_seconds(), 282.0);
         assert_eq!(e.isp_vac().as_seconds(), 311.0);
         assert_eq!(e.dry_mass().as_kg(), 470.0);
-        assert_eq!(e.propellant, Propellant::LoxRp1);
+        assert_eq!(e.propellant(), Propellant::LoxRp1);
     }
 
     #[test]
@@ -291,7 +469,8 @@ mod tests {
             Isp::seconds(453.0),
             Mass::kg(190.0),
             Propellant::LoxLh2,
-        );
+        )
+        .unwrap();
         assert!(rl10.is_upper_stage_only());
     }
 }

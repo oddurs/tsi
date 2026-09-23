@@ -37,7 +37,8 @@ use super::Ratio;
 /// let ratio = wet_mass / dry_mass;
 /// assert!((ratio.as_f64() - 19.5).abs() < 0.1);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Mass(f64);
 
 impl Mass {

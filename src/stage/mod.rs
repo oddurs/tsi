@@ -34,7 +34,8 @@
 //!     9,                      // 9 Merlin engines
 //!     Mass::kg(400_000.0),    // ~400 tonnes propellant
 //!     0.10,                   // 10% structural ratio
-//! );
+//! )
+//! .expect("a valid stage");
 //!
 //! assert!(stage.delta_v().as_mps() > 7_000.0);
 //! assert!(stage.twr_vac().as_f64() > 1.5);
@@ -51,19 +52,20 @@
 //! let merlin = db.get("merlin-1d").expect("engine not found");
 //! let mvac = db.get("merlin-vacuum").expect("engine not found");
 //!
-//! let stage1 = Stage::with_structural_ratio(merlin.clone(), 9, Mass::kg(400_000.0), 0.06);
-//! let stage2 = Stage::with_structural_ratio(mvac.clone(), 1, Mass::kg(100_000.0), 0.04);
+//! let stage1 = Stage::with_structural_ratio(merlin.clone(), 9, Mass::kg(400_000.0), 0.06)?;
+//! let stage2 = Stage::with_structural_ratio(mvac.clone(), 1, Mass::kg(100_000.0), 0.04)?;
 //!
-//! let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(22_800.0));
+//! let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(22_800.0))?;
 //!
 //! // Combined delta-v exceeds LEO requirements
 //! assert!(rocket.total_delta_v().as_mps() > 9_000.0);
 //! assert!(rocket.payload_fraction().as_f64() > 0.03);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod rocket;
 #[allow(clippy::module_inception)]
 mod stage;
 
-pub use rocket::{Rocket, TwrError};
-pub use stage::Stage;
+pub use rocket::{Rocket, RocketError, TwrError};
+pub use stage::{Stage, StageError};

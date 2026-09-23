@@ -2,12 +2,14 @@
 id: 31
 title: Serde support on public types; JSON output with a schema version
 type: feature
-status: backlog
+status: doing
 milestone: v0.8
+assignee: Oddur Sigurdsson
+claimed: 2026-09-23
 depends_on:
 - 29
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 priority: p1
 effort: m
 area: output

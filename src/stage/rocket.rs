@@ -41,18 +41,15 @@
 //! let raptor = db.get("raptor-2").expect("engine not found");
 //!
 //! // Create a two-stage rocket
-//! let stage1 = Stage::with_structural_ratio(
-//!     raptor.clone(), 9, Mass::kg(1_000_000.0), 0.05
-//! );
-//! let stage2 = Stage::with_structural_ratio(
-//!     raptor.clone(), 1, Mass::kg(100_000.0), 0.08
-//! );
+//! let stage1 = Stage::with_structural_ratio(raptor.clone(), 9, Mass::kg(1_000_000.0), 0.05)?;
+//! let stage2 = Stage::with_structural_ratio(raptor.clone(), 1, Mass::kg(100_000.0), 0.08)?;
 //!
-//! let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(100_000.0));
+//! let rocket = Rocket::new(vec![stage1, stage2], Mass::kg(100_000.0))?;
 //!
 //! println!("Total delta-v: {}", rocket.total_delta_v());
 //! println!("Total mass: {}", rocket.total_mass());
 //! println!("Payload fraction: {:.2}%", rocket.payload_fraction().as_f64() * 100.0);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 use crate::physics::{twr, IspModel, G0};
@@ -102,16 +99,36 @@ impl Rocket {
     /// * `stages` - Stages ordered bottom-to-top (first stage at index 0)
     /// * `payload` - Mass delivered to final orbit
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `stages` is empty.
-    pub fn new(stages: Vec<Stage>, payload: Mass) -> Self {
-        assert!(!stages.is_empty(), "Rocket must have at least one stage");
+    /// [`RocketError`] if there are no stages or the payload isn't a
+    /// positive, finite mass.
+    pub fn new(stages: Vec<Stage>, payload: Mass) -> Result<Self, RocketError> {
+        if stages.is_empty() {
+            return Err(RocketError::NoStages);
+        }
+        let p = payload.as_kg();
+        if !(p.is_finite() && p > 0.0) {
+            return Err(RocketError::InvalidPayload(payload));
+        }
+        Ok(Self::from_parts(stages, payload))
+    }
+
+    /// Build a rocket from stages and payload already known to be valid.
+    pub(crate) fn from_parts(stages: Vec<Stage>, payload: Mass) -> Self {
         Self {
             stages,
             payload,
             booster_isp: IspModel::AscentAveraged,
             surface_gravity: G0,
+        }
+    }
+
+    /// The same rocket (payload, Isp model, gravity) with different stages.
+    pub(crate) fn with_stages(&self, stages: Vec<Stage>) -> Self {
+        Self {
+            stages,
+            ..self.clone()
         }
     }
 
@@ -314,8 +331,22 @@ impl Rocket {
     }
 }
 
+/// Why stages and a payload don't make a rocket.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum RocketError {
+    /// A rocket needs at least one stage.
+    #[error("a rocket needs at least one stage")]
+    NoStages,
+
+    /// Payload must be a positive, finite mass.
+    #[error("payload must be a positive mass, got {0}")]
+    InvalidPayload(Mass),
+}
+
 /// Errors from TWR validation.
 #[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
 pub enum TwrError {
     /// First stage cannot lift off (TWR < 1.0)
     #[error("Insufficient liftoff TWR: {twr} < {required}")]
@@ -346,9 +377,11 @@ mod tests {
     }
 
     fn simple_two_stage() -> Rocket {
-        let stage1 = Stage::with_structural_ratio(get_raptor(), 9, Mass::kg(1_000_000.0), 0.05);
-        let stage2 = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.08);
-        Rocket::new(vec![stage1, stage2], Mass::kg(50_000.0))
+        let stage1 =
+            Stage::with_structural_ratio(get_raptor(), 9, Mass::kg(1_000_000.0), 0.05).unwrap();
+        let stage2 =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.08).unwrap();
+        Rocket::new(vec![stage1, stage2], Mass::kg(50_000.0)).unwrap()
     }
 
     #[test]
@@ -433,8 +466,9 @@ mod tests {
     #[test]
     fn rocket_validate_twr_fails_low_min() {
         // Create a rocket with very low TWR
-        let stage1 = Stage::with_structural_ratio(get_merlin(), 1, Mass::kg(1_000_000.0), 0.05);
-        let rocket = Rocket::new(vec![stage1], Mass::kg(50_000.0));
+        let stage1 =
+            Stage::with_structural_ratio(get_merlin(), 1, Mass::kg(1_000_000.0), 0.05).unwrap();
+        let rocket = Rocket::new(vec![stage1], Mass::kg(50_000.0)).unwrap();
 
         // This should fail - single Merlin can't lift this mass
         let result = rocket.validate_twr(Ratio::new(1.0), true);
@@ -452,8 +486,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "must have at least one stage")]
-    fn rocket_empty_stages_panics() {
-        Rocket::new(vec![], Mass::kg(1000.0));
+    fn rocket_needs_stages_and_a_payload() {
+        assert_eq!(
+            Rocket::new(vec![], Mass::kg(1000.0)).unwrap_err(),
+            RocketError::NoStages
+        );
+        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(1e5), 0.08).unwrap();
+        assert!(matches!(
+            Rocket::new(vec![stage], Mass::kg(f64::NAN)),
+            Err(RocketError::InvalidPayload(_))
+        ));
     }
 }

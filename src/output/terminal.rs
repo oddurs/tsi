@@ -19,8 +19,8 @@
 //! - Percentile values (5th, 50th, 95th)
 //! - ASCII histogram of delta-v distribution
 
-use crate::optimizer::{MonteCarloResults, Solution};
-use crate::units::{format_thousands_f64, Velocity};
+use tsiolkovsky::optimizer::{MonteCarloResults, Solution};
+use tsiolkovsky::units::{format_thousands_f64, Velocity};
 
 /// Width of the output box (interior content width)
 const BOX_WIDTH: usize = 61;
@@ -44,72 +44,16 @@ pub fn print_summary(left: &str, right: &str) {
     println!("  {}    {}", left, right);
 }
 
-/// Print a stage box.
-#[allow(clippy::too_many_arguments)]
-pub fn print_stage_box(
-    stage_num: usize,
-    stage_name: &str,
-    engine_name: &str,
-    engine_count: u32,
-    propellant_kg: f64,
-    propellant_type: &str,
-    dry_mass_kg: f64,
-    delta_v_mps: f64,
-    burn_time: &str,
-    twr: f64,
-) {
-    println!("  ┌{}┐", "─".repeat(BOX_WIDTH));
-
-    // Stage header
-    let header = format!("STAGE {} ({})", stage_num, stage_name);
-    println!("  │  {:<width$}│", header, width = BOX_WIDTH - 2);
-
-    // Engine
-    let engine = format!("Engine:     {} (×{})", engine_name, engine_count);
-    println!("  │  {:<width$}│", engine, width = BOX_WIDTH - 2);
-
-    // Propellant
-    let prop = format!(
-        "Propellant: {} kg ({})",
-        format_thousands_f64(propellant_kg),
-        propellant_type
-    );
-    println!("  │  {:<width$}│", prop, width = BOX_WIDTH - 2);
-
-    // Dry mass
-    let dry = format!("Dry mass:   {} kg", format_thousands_f64(dry_mass_kg));
-    println!("  │  {:<width$}│", dry, width = BOX_WIDTH - 2);
-
-    // Delta-v
-    let dv = format!("Δv:         {} m/s", format_thousands_f64(delta_v_mps));
-    println!("  │  {:<width$}│", dv, width = BOX_WIDTH - 2);
-
-    // Burn time
-    let bt = format!("Burn time:  {}", burn_time);
-    println!("  │  {:<width$}│", bt, width = BOX_WIDTH - 2);
-
-    // TWR
-    let twr_line = format!("TWR:        {:.2}", twr);
-    println!("  │  {:<width$}│", twr_line, width = BOX_WIDTH - 2);
-
-    println!("  └{}┘", "─".repeat(BOX_WIDTH));
-}
-
-/// Print the complete optimization solution.
-pub fn print_solution(solution: &Solution) {
-    print_solution_with_options(solution, 0.0);
-}
-
 /// Print the complete optimization solution.
 ///
 /// `design_margin` is the delta-v margin (as a fraction) the rocket was
 /// sized for, shown next to the margin it achieved. TWR is quoted against the
 /// rocket's own surface gravity.
-pub fn print_solution_with_options(solution: &Solution, design_margin: f64) {
-    let gravity = solution.rocket.surface_gravity();
-    let rocket = &solution.rocket;
+pub fn print_solution(solution: &Solution, design_margin: f64) {
+    let gravity = solution.rocket().surface_gravity();
+    let rocket = solution.rocket();
     let stages = rocket.stages();
-    let target_dv = solution.target_delta_v.as_mps();
+    let target_dv = solution.target_delta_v().as_mps();
 
     print_header("tsi — Staging Optimization Complete");
 
@@ -144,13 +88,13 @@ pub fn print_solution_with_options(solution: &Solution, design_margin: f64) {
             (rocket.stage_twr_in(i, gravity).as_f64(), "at ignition")
         };
 
-        print_stage_box_with_twr_label(
+        print_stage_box(
             stage_num,
             stage_name,
-            &stage.engine().name,
+            stage.engine().name(),
             stage.engine_count(),
             stage.propellant_mass().as_kg(),
-            stage.engine().propellant.name(),
+            stage.engine().propellant().name(),
             stage.dry_mass().as_kg(),
             stage_dv.as_mps(),
             &format!("{}", stage.burn_time()),
@@ -186,8 +130,8 @@ pub fn print_solution_with_options(solution: &Solution, design_margin: f64) {
     };
     println!(
         "  Delta-v margin:    {:+.0} m/s ({:+.1}%{})",
-        solution.margin.as_mps(),
-        solution.margin_percent(Velocity::mps(target_dv)),
+        solution.margin().as_mps(),
+        solution.margin_percent(),
         designed
     );
     let booster_model = rocket.booster_isp();
@@ -205,27 +149,27 @@ pub fn print_solution_with_options(solution: &Solution, design_margin: f64) {
     }
 
     // Optimizer metadata
-    if !solution.optimizer_name.is_empty() {
-        println!();
-        let runtime = if solution.runtime.as_millis() > 0 {
-            format!(" in {}ms", solution.runtime.as_millis())
-        } else {
-            String::new()
-        };
-        println!(
-            "  Optimizer: {} ({} configs{})",
-            solution.optimizer_name, solution.iterations, runtime
-        );
-    }
+    println!();
+    let runtime = if solution.runtime().as_millis() > 0 {
+        format!(" in {}ms", solution.runtime().as_millis())
+    } else {
+        String::new()
+    };
+    println!(
+        "  Optimizer: {} ({} configs{})",
+        solution.optimizer(),
+        solution.iterations(),
+        runtime
+    );
 
     println!();
 
     print_footer();
 }
 
-/// Print a stage box with custom TWR label.
+/// Print one stage as a box.
 #[allow(clippy::too_many_arguments)]
-fn print_stage_box_with_twr_label(
+fn print_stage_box(
     stage_num: usize,
     stage_name: &str,
     engine_name: &str,
@@ -305,7 +249,7 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
         "LOW CONFIDENCE"
     };
 
-    let design = &results.nominal_solution.rocket;
+    let design = results.design().rocket();
     println!(
         "  Design stressed:      {}-stage, {} kg (the solution above)",
         design.stage_count(),
@@ -314,13 +258,18 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
     println!("  Success probability:  {:.1}% ({}) ", success_pct, status);
     println!(
         "  Builds:               {} ({} too heavy to lift off)",
-        results.total_runs, results.failures
+        results.total_runs(),
+        results.failures()
     );
     println!(
         "  Seed:                 {} (repeat with --seed {})",
-        results.seed, results.seed
+        results.seed(),
+        results.seed()
     );
-    println!("  Runtime:              {}ms", results.runtime.as_millis());
+    println!(
+        "  Runtime:              {}ms",
+        results.runtime().as_millis()
+    );
     println!();
 
     // Delta-v statistics
@@ -368,9 +317,12 @@ pub fn print_monte_carlo_results(results: &MonteCarloResults) {
     }
 
     // Print histogram
-    if !results.delta_v_samples.is_empty() {
+    if !results.delta_v_samples().is_empty() {
         println!();
-        print_histogram(&results.delta_v_samples, results.target_delta_v.as_mps());
+        print_histogram(
+            results.delta_v_samples(),
+            results.target_delta_v().as_mps(),
+        );
     }
 }
 
@@ -455,12 +407,13 @@ fn print_histogram(samples: &[f64], target: f64) {
 // Atmospheric Losses Output
 // ============================================================================
 
-use crate::physics::losses::LossEstimate;
+use tsiolkovsky::physics::losses::{self, LossEstimate};
 
 /// Print estimated atmospheric and gravity losses.
 ///
 /// Shows a breakdown of estimated losses for Earth-to-LEO ascent.
-pub fn print_losses(estimate: &LossEstimate, total_dv: f64) {
+pub fn print_losses(estimate: &LossEstimate, total_dv: Velocity) {
+    let total_dv = total_dv.as_mps();
     println!();
     println!("  ┌{}┐", "─".repeat(BOX_WIDTH));
     println!(
@@ -473,26 +426,26 @@ pub fn print_losses(estimate: &LossEstimate, total_dv: f64) {
 
     println!(
         "  Gravity losses:   {:>7} m/s",
-        format_thousands_f64(estimate.gravity_loss_mps)
+        format_thousands_f64(estimate.gravity.as_mps())
     );
     println!(
         "  Drag losses:      {:>7} m/s",
-        format_thousands_f64(estimate.drag_loss_mps)
+        format_thousands_f64(estimate.drag.as_mps())
     );
     println!(
         "  Steering losses:  {:>7} m/s",
-        format_thousands_f64(estimate.steering_loss_mps)
+        format_thousands_f64(estimate.steering.as_mps())
     );
     println!("  {}", "─".repeat(30));
     println!(
         "  Total losses:     {:>7} m/s",
-        format_thousands_f64(estimate.total_loss_mps)
+        format_thousands_f64(estimate.total().as_mps())
     );
     println!();
 
     // Calculate effective delta-v available for orbital velocity
-    let effective_dv = total_dv - estimate.total_loss_mps;
-    let orbital_v_leo = 7_800.0;
+    let effective_dv = total_dv - estimate.total().as_mps();
+    let orbital_v_leo = losses::leo_orbital_velocity().as_mps();
 
     println!(
         "  Ideal delta-v:    {:>7} m/s",

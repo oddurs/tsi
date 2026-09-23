@@ -29,18 +29,46 @@ use crate::units::{Force, Isp, Mass, Ratio, Time, Velocity};
 ///
 /// # Structural Ratio
 ///
-/// The structural ratio (ε) relates structural mass to propellant mass:
+/// tsi describes a stage's structure with its **structural ratio**: the mass
+/// of everything that isn't propellant or engines (tanks, interstage,
+/// plumbing, avionics) per kilogram of propellant:
 ///
 /// ```text
-/// ε = Structural Mass / Propellant Mass
+/// structural ratio = structural mass / propellant mass
 /// ```
 ///
-/// Typical values:
-/// - 0.05-0.08: Excellent (modern composites, Falcon 9)
-/// - 0.08-0.12: Good (traditional aluminum-lithium)
-/// - 0.12-0.15: Acceptable (older designs, safety margins)
+/// Engines are left out because tsi counts them separately, engine by engine:
+/// their mass is fixed, not proportional to the propellant, and the optimizer
+/// needs to see that.
 ///
-/// Lower is better: less structure per kg of propellant means better mass ratio.
+/// Textbooks usually quote the **structural coefficient** ε instead, which is
+/// the whole dry mass (engines included) over dry plus propellant:
+///
+/// ```text
+/// ε = dry mass / (dry mass + propellant mass)
+/// ```
+///
+/// [`Stage::structural_coefficient`] gives ε for any stage. For a stage whose
+/// engines weigh E, the two are related by
+/// ε = (ratio · m_p + E) / ((1 + ratio) · m_p + E).
+///
+/// ## Real stages
+///
+/// | Stage | Propellant | Structural ratio | ε (textbook) |
+/// |-------|-----------|------------------|--------------|
+/// | Falcon 9 first stage | 411 t | 4.4% | 5.1% |
+/// | Falcon 9 second stage | 111.5 t | 3.2% | 3.5% |
+/// | Saturn V S-IC | 2,160 t | 4.1% | 5.7% |
+/// | Saturn V S-II | 443 t | 6.1% | 7.5% |
+/// | Saturn V S-IVB | 107 t | 10.9% | 11.2% |
+///
+/// Computed from published stage masses (SpaceX Falcon 9 specifications;
+/// NASA SP-4206, *Stages to Saturn*, appendix) with tsi's engine masses taken
+/// out. Hydrogen stages need big, insulated tanks for their low-density
+/// propellant, which is why the S-II and S-IVB are structurally heavier.
+///
+/// Lower is better: less structure per kg of propellant means a better mass
+/// ratio.
 ///
 /// # Examples
 ///
@@ -58,7 +86,8 @@ use crate::units::{Force, Isp, Mass, Ratio, Time, Velocity};
 ///     1,                      // Single engine
 ///     Mass::kg(100_000.0),    // 100 tonnes propellant
 ///     0.10,                   // 10% structural ratio
-/// );
+/// )
+/// .expect("a valid stage");
 ///
 /// println!("Delta-v: {}", stage.delta_v());
 /// println!("Burn time: {}", stage.burn_time());
@@ -76,9 +105,87 @@ pub struct Stage {
     structural_mass: Mass,
 }
 
+/// Why a stage's numbers can't describe a real stage.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum StageError {
+    /// A stage needs at least one engine.
+    #[error("a stage needs at least one engine")]
+    NoEngines,
+
+    /// Propellant mass must be positive and finite.
+    #[error("propellant mass must be a positive number, got {0}")]
+    InvalidPropellant(Mass),
+
+    /// Structural mass must be zero or positive, and finite.
+    #[error("structural mass must be zero or a positive number, got {0}")]
+    InvalidStructuralMass(Mass),
+
+    /// Structural ratio must be zero or positive, and finite.
+    #[error("structural ratio must be zero or a positive number, got {0}")]
+    InvalidStructuralRatio(f64),
+}
+
 impl Stage {
     /// Create a new stage with explicit structural mass.
+    ///
+    /// # Errors
+    ///
+    /// [`StageError`] for zero engines, a propellant mass that isn't positive,
+    /// or a negative or non-finite structural mass.
     pub fn new(
+        engine: Engine,
+        engine_count: u32,
+        propellant_mass: Mass,
+        structural_mass: Mass,
+    ) -> Result<Self, StageError> {
+        if engine_count == 0 {
+            return Err(StageError::NoEngines);
+        }
+        let p = propellant_mass.as_kg();
+        if !(p.is_finite() && p > 0.0) {
+            return Err(StageError::InvalidPropellant(propellant_mass));
+        }
+        let s = structural_mass.as_kg();
+        if !(s.is_finite() && s >= 0.0) {
+            return Err(StageError::InvalidStructuralMass(structural_mass));
+        }
+        Ok(Self::from_parts(
+            engine,
+            engine_count,
+            propellant_mass,
+            structural_mass,
+        ))
+    }
+
+    /// Create a stage with structural mass as a ratio of propellant mass.
+    ///
+    /// This is the common way to define stages when you know the structural
+    /// efficiency but not the exact structural mass.
+    ///
+    /// # Arguments
+    ///
+    /// * `structural_ratio` - Structural mass / propellant mass, engines
+    ///   excluded (typically 0.03-0.11; see the table above)
+    ///
+    /// # Errors
+    ///
+    /// As [`Stage::new`], or [`StageError::InvalidStructuralRatio`].
+    pub fn with_structural_ratio(
+        engine: Engine,
+        engine_count: u32,
+        propellant_mass: Mass,
+        structural_ratio: f64,
+    ) -> Result<Self, StageError> {
+        if !(structural_ratio.is_finite() && structural_ratio >= 0.0) {
+            return Err(StageError::InvalidStructuralRatio(structural_ratio));
+        }
+        let structural_mass = Mass::kg(propellant_mass.as_kg() * structural_ratio);
+        Self::new(engine, engine_count, propellant_mass, structural_mass)
+    }
+
+    /// Build a stage from numbers already known to be valid.
+    pub(crate) fn from_parts(
         engine: Engine,
         engine_count: u32,
         propellant_mass: Mass,
@@ -92,22 +199,30 @@ impl Stage {
         }
     }
 
-    /// Create a stage with structural mass as a ratio of propellant mass.
+    /// Structural ratio: structural mass (engines excluded) / propellant mass.
+    pub fn structural_ratio(&self) -> f64 {
+        self.structural_mass.as_kg() / self.propellant_mass.as_kg()
+    }
+
+    /// The textbook structural coefficient ε = dry / (dry + propellant),
+    /// engines included.
     ///
-    /// This is the common way to define stages when you know the structural
-    /// efficiency but not the exact structural mass.
+    /// ```
+    /// use tsiolkovsky::engine::EngineDatabase;
+    /// use tsiolkovsky::stage::Stage;
+    /// use tsiolkovsky::units::Mass;
     ///
-    /// # Arguments
+    /// let db = EngineDatabase::load_embedded().unwrap();
+    /// let merlin = db.get("merlin-1d").unwrap().clone();
     ///
-    /// * `structural_ratio` - Structural mass / propellant mass (typically 0.05-0.15)
-    pub fn with_structural_ratio(
-        engine: Engine,
-        engine_count: u32,
-        propellant_mass: Mass,
-        structural_ratio: f64,
-    ) -> Self {
-        let structural_mass = Mass::kg(propellant_mass.as_kg() * structural_ratio);
-        Self::new(engine, engine_count, propellant_mass, structural_mass)
+    /// // Falcon 9's first stage: 22.2 t dry, of which 4.2 t is engines
+    /// let s1 = Stage::new(merlin, 9, Mass::kg(411_000.0), Mass::kg(17_970.0)).unwrap();
+    /// assert!((s1.structural_ratio() - 0.044).abs() < 0.001);
+    /// assert!((s1.structural_coefficient() - 0.051).abs() < 0.001);
+    /// ```
+    pub fn structural_coefficient(&self) -> f64 {
+        let dry = self.dry_mass().as_kg();
+        dry / (dry + self.propellant_mass.as_kg())
     }
 
     /// Get the engine used by this stage.
@@ -254,7 +369,8 @@ mod tests {
 
     #[test]
     fn stage_mass_calculations() {
-        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1).unwrap();
 
         // Structural: 10,000 kg, Engine: 1,600 kg
         assert!((stage.dry_mass().as_kg() - 11_600.0).abs() < 1.0);
@@ -263,7 +379,8 @@ mod tests {
 
     #[test]
     fn stage_delta_v() {
-        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1).unwrap();
 
         let dv = stage.delta_v();
         // ~7,771 m/s expected
@@ -273,7 +390,8 @@ mod tests {
 
     #[test]
     fn stage_multiple_engines() {
-        let stage = Stage::with_structural_ratio(get_merlin(), 9, Mass::kg(400_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_merlin(), 9, Mass::kg(400_000.0), 0.1).unwrap();
 
         // 9 engines = 9 * 470 kg = 4,230 kg
         // Structural = 40,000 kg
@@ -287,7 +405,8 @@ mod tests {
 
     #[test]
     fn stage_twr() {
-        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1).unwrap();
 
         let twr = stage.twr_vac();
         // ~2.24 expected
@@ -297,7 +416,8 @@ mod tests {
 
     #[test]
     fn stage_with_payload() {
-        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1).unwrap();
 
         let payload = Mass::kg(10_000.0);
         let dv_no_payload = stage.delta_v();
@@ -309,7 +429,8 @@ mod tests {
 
     #[test]
     fn stage_burn_time() {
-        let stage = Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1);
+        let stage =
+            Stage::with_structural_ratio(get_raptor(), 1, Mass::kg(100_000.0), 0.1).unwrap();
 
         let time = stage.burn_time();
         // ~140 seconds expected

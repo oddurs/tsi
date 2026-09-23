@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
-use anyhow::{Context, Result};
 use serde::Deserialize;
 
 use super::Engine;
@@ -14,6 +14,28 @@ struct EngineFile {
     engine: Vec<Engine>,
 }
 
+/// Why an engine database couldn't be loaded.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum DatabaseError {
+    /// The file couldn't be read.
+    #[error("couldn't read engine file {}: {source}", path.display())]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    /// The TOML is malformed, or an engine in it is physically impossible
+    /// (every engine is validated by [`Engine::new`] as it loads).
+    #[error("invalid engine data in {origin}: {message}")]
+    Invalid {
+        /// The file, or "the built-in database"
+        origin: String,
+        /// What was wrong, with the line and column where TOML gives them
+        message: String,
+    },
+}
+
 /// Database of available rocket engines.
 #[derive(Debug, Clone)]
 pub struct EngineDatabase {
@@ -21,21 +43,50 @@ pub struct EngineDatabase {
 }
 
 impl EngineDatabase {
-    /// Load the embedded engine database.
-    pub fn load_embedded() -> Result<Self> {
-        let file: EngineFile =
-            toml::from_str(EMBEDDED_ENGINES).context("Failed to parse embedded engine database")?;
-        Ok(Self {
-            engines: file.engine,
+    /// The engine database compiled into tsi, parsed once and shared.
+    ///
+    /// The embedded data is checked by the crate's own tests, so this can't
+    /// fail at run time.
+    pub fn builtin() -> &'static EngineDatabase {
+        static BUILTIN: OnceLock<EngineDatabase> = OnceLock::new();
+        BUILTIN.get_or_init(|| {
+            #[expect(
+                clippy::expect_used,
+                reason = "the embedded database is validated by tests; failure is a build defect"
+            )]
+            Self::parse(EMBEDDED_ENGINES, "the built-in database")
+                .expect("the built-in engine database is valid")
         })
     }
 
+    /// Load the embedded engine database.
+    ///
+    /// Returns a copy of [`EngineDatabase::builtin`]; prefer that when a
+    /// reference is enough.
+    pub fn load_embedded() -> Result<Self, DatabaseError> {
+        Self::parse(EMBEDDED_ENGINES, "the built-in database")
+    }
+
     /// Load an engine database from a TOML file.
-    pub fn load_from_file(path: &Path) -> Result<Self> {
-        let contents = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read engine file: {}", path.display()))?;
-        let file: EngineFile = toml::from_str(&contents)
-            .with_context(|| format!("Failed to parse engine file: {}", path.display()))?;
+    ///
+    /// # Errors
+    ///
+    /// [`DatabaseError::Io`] if the file can't be read, or
+    /// [`DatabaseError::Invalid`] if its TOML is malformed or any engine is
+    /// physically impossible.
+    pub fn load_from_file(path: &Path) -> Result<Self, DatabaseError> {
+        let contents = std::fs::read_to_string(path).map_err(|source| DatabaseError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        Self::parse(&contents, &path.display().to_string())
+    }
+
+    fn parse(toml_text: &str, origin: &str) -> Result<Self, DatabaseError> {
+        let file: EngineFile = toml::from_str(toml_text).map_err(|e| DatabaseError::Invalid {
+            origin: origin.to_string(),
+            message: e.to_string(),
+        })?;
         Ok(Self {
             engines: file.engine,
         })
@@ -46,7 +97,7 @@ impl EngineDatabase {
         let name_lower = name.to_lowercase();
         self.engines
             .iter()
-            .find(|e| e.name.to_lowercase() == name_lower)
+            .find(|e| e.name().to_lowercase() == name_lower)
     }
 
     /// List all available engines.
@@ -56,7 +107,7 @@ impl EngineDatabase {
 
     /// Get available engine names.
     pub fn names(&self) -> Vec<&str> {
-        self.engines.iter().map(|e| e.name.as_str()).collect()
+        self.engines.iter().map(|e| e.name()).collect()
     }
 
     /// Suggest similar engine names for a typo.
@@ -67,7 +118,7 @@ impl EngineDatabase {
             .engines
             .iter()
             .map(|e| {
-                let name_lower = e.name.to_lowercase();
+                let name_lower = e.name().to_lowercase();
 
                 // Strong preference for substring/prefix matches
                 let score = if name_lower.starts_with(&query_lower) {
@@ -84,7 +135,7 @@ impl EngineDatabase {
                     edit_distance(&query_lower, &name_lower) + 3
                 };
 
-                (e.name.as_str(), score)
+                (e.name(), score)
             })
             .collect();
 
@@ -133,8 +184,9 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 impl Default for EngineDatabase {
+    /// A copy of the [built-in database](EngineDatabase::builtin).
     fn default() -> Self {
-        Self::load_embedded().expect("Embedded engine database should be valid")
+        Self::builtin().clone()
     }
 }
 
@@ -144,8 +196,34 @@ mod tests {
 
     #[test]
     fn load_embedded_database() {
+        // Every engine passes Engine::new's checks, or this fails.
         let db = EngineDatabase::load_embedded().unwrap();
-        assert!(!db.engines.is_empty());
+        assert_eq!(db.engines.len(), 11);
+        assert_eq!(db.engines, EngineDatabase::builtin().engines);
+    }
+
+    #[test]
+    fn impossible_engines_are_rejected_on_load() {
+        let bad = r#"
+            [[engine]]
+            name = "Backwards"
+            thrust_sl = 1000000
+            thrust_vac = 900000
+            isp_sl = 300
+            isp_vac = 320
+            dry_mass = 500
+            propellant = "LoxRp1"
+        "#;
+        let err = EngineDatabase::parse(bad, "test").unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("Backwards"), "{message}");
+        assert!(message.contains("exceeds vacuum"), "{message}");
+    }
+
+    #[test]
+    fn missing_file_is_an_io_error() {
+        let err = EngineDatabase::load_from_file(Path::new("/no/such/engines.toml")).unwrap_err();
+        assert!(matches!(err, DatabaseError::Io { .. }));
     }
 
     #[test]
@@ -153,10 +231,10 @@ mod tests {
         let db = EngineDatabase::default();
 
         let merlin = db.get("Merlin-1D").unwrap();
-        assert_eq!(merlin.name, "Merlin-1D");
+        assert_eq!(merlin.name(), "Merlin-1D");
 
         let raptor = db.get("raptor-2").unwrap(); // case-insensitive
-        assert_eq!(raptor.name, "Raptor-2");
+        assert_eq!(raptor.name(), "Raptor-2");
     }
 
     #[test]
