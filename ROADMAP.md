@@ -87,7 +87,7 @@ The vehicle is assembled: a library that can be depended on.
 
 ## v0.9 — Wet dress
 
-`··········` 0% · 0 of 10 done · due 2026-11-17
+`··········` 0% · 0 of 11 done · due 2026-11-17
 
 Full rehearsal, fuelled: the features that give tsi its character.
 
@@ -103,6 +103,10 @@ Full rehearsal, fuelled: the features that give tsi its character.
 - [ ] [`0042`](https://github.com/oddurs/tsi/blob/main/cairn/items/0042-tsi-sweep-trade-studies-as-a-table-or-csv.md) tsi sweep: trade studies as a table or CSV <sup>feature · p2 · m · cli</sup>
 - [ ] [`0043`](https://github.com/oddurs/tsi/blob/main/cairn/items/0043-docs-physics-md-becomes-a-guided-tour-why-rockets-stage.md) docs/physics.md becomes a guided tour: why rockets stage <sup>docs · p1 · m · docs</sup>
 - [ ] [`0044`](https://github.com/oddurs/tsi/blob/main/cairn/items/0044-a-little-tsiolkovsky-in-the-terminal.md) A little Tsiolkovsky in the terminal <sup>feature · p3 · s · cli</sup>
+
+### in progress
+
+- [ ] [`0060`](https://github.com/oddurs/tsi/blob/main/cairn/items/0060-agentic-pr-workflow-ship-script-hooks-auto-merge.md) Agentic PR workflow: ship script, hooks, auto-merge <sup>chore · p1 · s · infra</sup>
 
 ## v1.0 — Liftoff
 

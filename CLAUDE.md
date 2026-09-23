@@ -59,6 +59,23 @@ The library (`src/lib.rs`) is the product; the binary (`src/main.rs`) is a thin 
 - **18 validation tests** - Real rocket comparisons (`tests/validation.rs`)
 - **36 doc tests** - Examples in rustdoc comments (none ignored)
 
+## Git workflow
+
+Every change reaches main as a squash-merged PR; main is protected and needs
+only the `CI OK` check (no reviews), so an agent can land work end to end.
+Use the `ship` skill (`.claude/skills/ship/SKILL.md`):
+
+```bash
+git fetch -q origin main && git switch -c fix/thing origin/main
+# ...work, conventional commits (fix(scope): ..., feat!: ... for breaking)
+scripts/ship.sh --wait        # gate, push, PR, auto-merge, watch CI
+```
+
+- Hooks live in `.githooks/` (commit-msg format, cargo fmt, cairn post-merge).
+  After cloning: `git config core.hooksPath .githooks`
+- The PR title becomes the commit on main; CI checks its format
+- Tags and crates.io releases are the user's call
+
 ## Development Roadmap
 
 The roadmap and issues live in cairn (see the section at the end of this file).

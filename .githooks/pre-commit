@@ -1,0 +1,8 @@
+#!/bin/sh
+# Fast gate: formatting only. Clippy and tests run in CI and in scripts/ship.sh.
+command -v cargo >/dev/null 2>&1 || exit 0
+git diff --cached --name-only --diff-filter=ACM | grep -q '\.rs$' || exit 0
+cargo fmt --all --check >/dev/null 2>&1 || {
+  echo "pre-commit: run 'cargo fmt' first" >&2
+  exit 1
+}
