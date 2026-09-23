@@ -38,7 +38,7 @@ The phase-by-phase plan that got tsi to v0.6 is archived in
 
 ## v0.7 — Static fire
 
-`########··` 76% · 13 of 17 done · due 2026-10-06
+`#########·` 82% · 14 of 17 done · due 2026-10-06
 
 The engine lights on the test stand before anything is stacked on it.
 
@@ -46,7 +46,6 @@ The engine lights on the test stand before anything is stacked on it.
 
 - [ ] [`0007`](https://github.com/oddurs/tsi/blob/main/cairn/items/0007-github-actions-ci.md) GitHub Actions CI <sup>chore · p0 · m · infra</sup>
 - [ ] [`0021`](https://github.com/oddurs/tsi/blob/main/cairn/items/0021-bring-claude-md-changelog-and-planning-docs-up-to-date.md) Bring CLAUDE.md, CHANGELOG and planning docs up to date <sup>docs · p1 · m · docs</sup>
-- [ ] [`0022`](https://github.com/oddurs/tsi/blob/main/cairn/items/0022-three-doctests-are-marked-ignore.md) Three doctests are marked ignore <sup>bug · p2 · s · docs</sup>
 
 ### in progress
 
@@ -67,6 +66,7 @@ The engine lights on the test stand before anything is stacked on it.
 - [x] [`0018`](https://github.com/oddurs/tsi/blob/main/cairn/items/0018-nan-and-infinite-inputs-pass-validation.md) NaN and infinite inputs pass validation <sup>bug · p1 · s · optimizer</sup>
 - [x] [`0019`](https://github.com/oddurs/tsi/blob/main/cairn/items/0019-property-tests-for-optimizer-invariants.md) Property tests for optimizer invariants <sup>chore · p0 · m · optimizer</sup>
 - [x] [`0020`](https://github.com/oddurs/tsi/blob/main/cairn/items/0020-optimizer-reproduces-falcon-9-and-saturn-v-staging.md) Optimizer reproduces Falcon 9 and Saturn V staging <sup>validation · p1 · m · physics</sup>
+- [x] [`0022`](https://github.com/oddurs/tsi/blob/main/cairn/items/0022-three-doctests-are-marked-ignore.md) Three doctests are marked ignore <sup>bug · p2 · s · docs</sup>
 
 ## v0.8 — Stacking
 

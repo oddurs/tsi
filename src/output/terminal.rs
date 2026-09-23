@@ -95,9 +95,8 @@ pub fn print_stage_box(
     println!("  └{}┘", "─".repeat(BOX_WIDTH));
 }
 
-/// Print the complete optimization solution.
-pub fn print_solution(target_dv: f64, payload_kg: f64, solution: &Solution) {
-    let _ = (target_dv, payload_kg);
+/// Print the complete optimization solution for an Earth launch.
+pub fn print_solution(solution: &Solution) {
     print_solution_with_options(solution, crate::physics::G0, 0.0);
 }
 

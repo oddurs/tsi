@@ -7,10 +7,21 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```
+//! # use tsi::engine::EngineDatabase;
+//! # use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+//! # use tsi::units::{Mass, Velocity};
+//! # let db = EngineDatabase::load_embedded().unwrap();
+//! # let problem = Problem::new(
+//! #     Mass::kg(5_000.0),
+//! #     Velocity::mps(9_400.0),
+//! #     vec![db.get("raptor-2").unwrap().clone()],
+//! #     Constraints::default(),
+//! # );
 //! use tsi::output::terminal;
 //!
-//! terminal::print_solution(9400.0, 5000.0, &solution);
+//! let solution = AnalyticalOptimizer.optimize(&problem).unwrap();
+//! terminal::print_solution(&solution);
 //! ```
 
 pub mod diagram;

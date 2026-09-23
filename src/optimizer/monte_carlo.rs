@@ -198,10 +198,26 @@ impl MonteCarloResults {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// // How much margin for 95% confidence?
+    /// ```
+    /// # use tsi::engine::EngineDatabase;
+    /// # use tsi::optimizer::{Constraints, MonteCarloRunner, Problem, Uncertainty};
+    /// # use tsi::units::{Mass, Velocity};
+    /// # let db = EngineDatabase::load_embedded().unwrap();
+    /// # let problem = Problem::new(
+    /// #     Mass::kg(5_000.0),
+    /// #     Velocity::mps(9_400.0),
+    /// #     vec![db.get("raptor-2").unwrap().clone()],
+    /// #     Constraints::default(),
+    /// # );
+    /// let results = MonteCarloRunner::new(Uncertainty::default())
+    ///     .with_seed(1)
+    ///     .run(&problem, 2_000)
+    ///     .unwrap();
+    ///
+    /// // How much margin for 95% confidence? A zero-margin design needs some.
     /// let margin = results.required_margin(0.95);
-    /// println!("Need {} m/s margin for 95% confidence", margin);
+    /// assert!(margin > 0.0);
+    /// println!("Need {margin:.0} m/s margin for 95% confidence");
     /// ```
     pub fn required_margin(&self, confidence: f64) -> f64 {
         if self.delta_v_samples.is_empty() {

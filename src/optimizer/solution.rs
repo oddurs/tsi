@@ -34,11 +34,24 @@ pub(crate) const DELTA_V_TOLERANCE_MPS: f64 = 1e-3;
 ///
 /// # Example
 ///
-/// ```ignore
-/// let solution = optimizer.optimize(&problem)?;
+/// ```
+/// # use tsi::engine::EngineDatabase;
+/// # use tsi::optimizer::{AnalyticalOptimizer, Constraints, Optimizer, Problem};
+/// # use tsi::units::{Mass, Velocity};
+/// # let db = EngineDatabase::load_embedded().unwrap();
+/// # let problem = Problem::new(
+/// #     Mass::kg(5_000.0),
+/// #     Velocity::mps(9_400.0),
+/// #     vec![db.get("raptor-2").unwrap().clone()],
+/// #     Constraints::default(),
+/// # );
+/// use tsi::optimizer::Solution;
+///
+/// let optimizer = AnalyticalOptimizer;
+/// let solution: Solution = optimizer.optimize(&problem).unwrap();
 ///
 /// println!("Total mass: {}", solution.rocket.total_mass());
-/// println!("Delta-v margin: +{} m/s", solution.margin.as_mps());
+/// println!("Delta-v margin: {:+.0} m/s", solution.margin.as_mps());
 /// println!("Payload fraction: {:.2}%", solution.payload_fraction_percent());
 /// println!("Evaluated {} configurations in {:?}", solution.iterations, solution.runtime);
 /// ```

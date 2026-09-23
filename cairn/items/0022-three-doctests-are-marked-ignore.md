@@ -2,10 +2,12 @@
 id: 22
 title: Three doctests are marked ignore
 type: bug
-status: planned
+status: done
 milestone: v0.7
+assignee: Oddur Sigurdsson
 created: 2026-09-22
 updated: 2026-09-22
+closed_at: 2026-09-22
 priority: p2
 effort: s
 area: docs
@@ -15,5 +17,5 @@ area: docs
 
 ## Acceptance criteria
 
-- [ ] All three compile and run (hide setup lines with `#`)
-- [ ] `cargo test --doc` reports 0 ignored
+- [x] All three compile and run (hide setup lines with `#`)
+- [x] `cargo test --doc` reports 0 ignored
